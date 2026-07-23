@@ -1,0 +1,9 @@
+Metric,Value
+total_real_vehicles,1
+total_real_photographs,10
+specific_category_accuracy_percent,40.0
+macro_category_accuracy_percent,40.0
+cover_top1_accuracy_percent,0.0
+cover_top3_hit_rate_percent,0.0
+exterior_cover_rate_percent,100.0
+wrongful_gallery_deletions,0

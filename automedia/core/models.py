@@ -29,6 +29,45 @@ class PhotoCategory:
     ]
 
 
+class MacroCategory:
+    EXTERIOR = "EXTERIOR"
+    INTERIOR = "INTERIOR"
+    DETAIL = "DETAIL"
+    MECHANICAL = "MECHANICAL"
+    DOCUMENT = "DOCUMENT"
+    UNKNOWN = "UNKNOWN"
+
+    ALL_MACRO_CATEGORIES = [
+        EXTERIOR, INTERIOR, DETAIL, MECHANICAL, DOCUMENT, UNKNOWN
+    ]
+
+    CATEGORY_TO_MACRO_MAP = {
+        PhotoCategory.FRONT: EXTERIOR,
+        PhotoCategory.FRONT_3_4: EXTERIOR,
+        PhotoCategory.REAR: EXTERIOR,
+        PhotoCategory.REAR_3_4: EXTERIOR,
+        PhotoCategory.LEFT_SIDE: EXTERIOR,
+        PhotoCategory.RIGHT_SIDE: EXTERIOR,
+
+        PhotoCategory.INTERIOR_FRONT: INTERIOR,
+        PhotoCategory.INTERIOR_REAR: INTERIOR,
+        PhotoCategory.DASHBOARD: INTERIOR,
+        PhotoCategory.STEERING: INTERIOR,
+        PhotoCategory.TRUNK: INTERIOR,
+
+        PhotoCategory.WHEEL: DETAIL,
+        PhotoCategory.KEY: DETAIL,
+
+        PhotoCategory.ENGINE: MECHANICAL,
+        PhotoCategory.DOCUMENT: DOCUMENT,
+        PhotoCategory.UNKNOWN: UNKNOWN,
+    }
+
+    @classmethod
+    def get_macro(cls, category: str) -> str:
+        return cls.CATEGORY_TO_MACRO_MAP.get(category, cls.UNKNOWN)
+
+
 @dataclass
 class PhotoQualityScore:
     overall_score: float = 0.0
@@ -64,12 +103,14 @@ class PhotoQualityScore:
 @dataclass
 class PhotoClassificationResult:
     category: str = PhotoCategory.UNKNOWN
+    macro_category: str = MacroCategory.UNKNOWN
     confidence: float = 0.0
     reason: str = "Heuristic classification"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "category": self.category,
+            "macro_category": self.macro_category or MacroCategory.get_macro(self.category),
             "confidence": round(self.confidence, 2),
             "reason": self.reason
         }
@@ -224,9 +265,14 @@ class PipelineConfig:
 @dataclass
 class VisionAnalysis:
     file: str
-    vehicle_bbox: Dict[str, int] = field(default_factory=lambda: {"x": 0, "y": 0, "width": 0, "height": 0})
+    content_bbox_estimate: Dict[str, int] = field(default_factory=lambda: {"x": 0, "y": 0, "width": 0, "height": 0})
+    vehicle_bbox: Optional[Dict[str, int]] = None
     plate_regions: List[PlateRegion] = field(default_factory=list)
     quality_score: float = 0.0
+
+    def __post_init__(self):
+        if self.vehicle_bbox and (not self.content_bbox_estimate or self.content_bbox_estimate.get("width", 0) == 0):
+            self.content_bbox_estimate = self.vehicle_bbox
     sharpness_score: float = 0.0
     brightness_score: float = 0.0
     contrast_score: float = 0.0
@@ -234,7 +280,7 @@ class VisionAnalysis:
     low_confidence: bool = False
     plate_detection_method: str = "not_found"  # "manual", "auto", "not_found"
 
-    # Sprint 2 Visual Intelligence Extensions
+    # Sprint 2 Extensions
     detailed_quality: Optional[PhotoQualityScore] = None
     classification: Optional[PhotoClassificationResult] = None
     is_near_duplicate: bool = False
@@ -243,7 +289,7 @@ class VisionAnalysis:
     def to_dict(self) -> Dict[str, Any]:
         d = {
             "file": self.file,
-            "vehicle_bbox": self.vehicle_bbox,
+            "content_bbox_estimate": self.content_bbox_estimate,
             "plate_regions": [p.to_dict() for p in self.plate_regions],
             "quality_score": round(self.quality_score, 2),
             "sharpness_score": round(self.sharpness_score, 2),

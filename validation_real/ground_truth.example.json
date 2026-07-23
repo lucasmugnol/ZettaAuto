@@ -1,0 +1,38 @@
+{
+  "vehicle_id": "vehicle_01",
+  "reviewer": "human",
+  "photos": {
+    "IMG_001.jpg": {
+      "category": "FRONT_3_4",
+      "macro_category": "EXTERIOR",
+      "quality_status": "GOOD",
+      "suitable_for_cover": true,
+      "cover_rank_human": 1,
+      "duplicate_group": null,
+      "issues": []
+    },
+    "IMG_002.jpg": {
+      "category": "INTERIOR_FRONT",
+      "macro_category": "INTERIOR",
+      "quality_status": "WARNING",
+      "suitable_for_cover": false,
+      "cover_rank_human": null,
+      "duplicate_group": null,
+      "issues": ["OVEREXPOSED"]
+    }
+  },
+  "expected_gallery_coverage": {
+    "EXTERIOR": true,
+    "INTERIOR": true,
+    "DASHBOARD": true,
+    "TRUNK": false,
+    "ENGINE": false,
+    "WHEEL": true,
+    "KEY": false
+  },
+  "human_cover_top_3": [
+    "IMG_001.jpg",
+    "IMG_004.jpg",
+    "IMG_006.jpg"
+  ]
+}

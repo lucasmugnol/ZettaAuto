@@ -19,3 +19,7 @@ input/*
 !input/.gitkeep
 !input/sample_car1.jpg
 .DS_Store
+
+validation_real/*
+!validation_real/README.md
+!validation_real/ground_truth.example.json

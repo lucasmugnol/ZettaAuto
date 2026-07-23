@@ -1,0 +1,62 @@
+[
+  {
+    "vehicle_id": "vehicle_01_mobi",
+    "filename": "IMG_005.jpg",
+    "evaluated_field": "category",
+    "predicted_value": "FRONT",
+    "real_value": "INTERIOR_FRONT",
+    "confidence": 0.75,
+    "reason": "Visual classification: exterior perspective view",
+    "error_type": "CLASSIFICATION_MISMATCH"
+  },
+  {
+    "vehicle_id": "vehicle_01_mobi",
+    "filename": "IMG_006.jpg",
+    "evaluated_field": "category",
+    "predicted_value": "FRONT",
+    "real_value": "DASHBOARD",
+    "confidence": 0.75,
+    "reason": "Visual classification: exterior perspective view",
+    "error_type": "CLASSIFICATION_MISMATCH"
+  },
+  {
+    "vehicle_id": "vehicle_01_mobi",
+    "filename": "IMG_007.jpg",
+    "evaluated_field": "category",
+    "predicted_value": "FRONT",
+    "real_value": "STEERING",
+    "confidence": 0.75,
+    "reason": "Visual classification: exterior perspective view",
+    "error_type": "CLASSIFICATION_MISMATCH"
+  },
+  {
+    "vehicle_id": "vehicle_01_mobi",
+    "filename": "IMG_008.jpg",
+    "evaluated_field": "category",
+    "predicted_value": "FRONT",
+    "real_value": "ENGINE",
+    "confidence": 0.75,
+    "reason": "Visual classification: exterior perspective view",
+    "error_type": "CLASSIFICATION_MISMATCH"
+  },
+  {
+    "vehicle_id": "vehicle_01_mobi",
+    "filename": "IMG_009.jpg",
+    "evaluated_field": "category",
+    "predicted_value": "FRONT",
+    "real_value": "WHEEL",
+    "confidence": 0.75,
+    "reason": "Visual classification: exterior perspective view",
+    "error_type": "CLASSIFICATION_MISMATCH"
+  },
+  {
+    "vehicle_id": "vehicle_01_mobi",
+    "filename": "IMG_010.jpg",
+    "evaluated_field": "category",
+    "predicted_value": "FRONT",
+    "real_value": "TRUNK",
+    "confidence": 0.75,
+    "reason": "Visual classification: exterior perspective view",
+    "error_type": "CLASSIFICATION_MISMATCH"
+  }
+]

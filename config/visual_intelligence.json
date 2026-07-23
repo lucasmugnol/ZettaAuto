@@ -1,0 +1,58 @@
+{
+  "quality_thresholds": {
+    "sharpness_weight": 0.25,
+    "brightness_weight": 0.15,
+    "contrast_weight": 0.15,
+    "exposure_weight": 0.10,
+    "composition_weight": 0.15,
+    "orientation_weight": 0.10,
+    "color_balance_weight": 0.10,
+    "good_status_threshold": 60.0,
+    "warning_status_threshold": 35.0,
+    "too_dark_brightness_max": 60.0,
+    "too_bright_brightness_min": 200.0,
+    "blurry_sharpness_max": 30.0,
+    "low_contrast_max": 25.0
+  },
+  "duplicate_thresholds": {
+    "hamming_distance_max": 3,
+    "histogram_similarity_min": 0.94,
+    "auto_delete_duplicates": false
+  },
+  "cover_selection": {
+    "category_weights": {
+      "FRONT_3_4": 40.0,
+      "FRONT": 35.0,
+      "REAR_3_4": 25.0,
+      "LEFT_SIDE": 20.0,
+      "RIGHT_SIDE": 20.0,
+      "REAR": 15.0,
+      "INTERIOR_FRONT": -35.0,
+      "INTERIOR_REAR": -40.0,
+      "DASHBOARD": -45.0,
+      "STEERING": -45.0,
+      "TRUNK": -60.0,
+      "ENGINE": -60.0,
+      "WHEEL": -60.0,
+      "KEY": -80.0,
+      "DOCUMENT": -100.0,
+      "UNKNOWN": 0.0
+    },
+    "duplicate_penalty": -10.0,
+    "bad_status_penalty": -30.0,
+    "warning_status_penalty": -15.0,
+    "portrait_orientation_penalty": -15.0
+  },
+  "gallery_coverage": {
+    "essential_checklist": [
+      "Front View",
+      "Rear View",
+      "Side View",
+      "Dashboard",
+      "Interior",
+      "Trunk",
+      "Engine",
+      "Wheel"
+    ]
+  }
+}

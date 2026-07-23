@@ -1,0 +1,139 @@
+{
+  "sprint_version": "2.2 - Real Visual Validation with Human Ground Truth",
+  "sample_size": {
+    "total_real_vehicles": 1,
+    "total_real_photographs": 10,
+    "synthetic_images_used": 0
+  },
+  "metrics": {
+    "specific_category_accuracy_percent": 40.0,
+    "macro_category_accuracy_percent": 40.0,
+    "cover_top1_accuracy_percent": 0.0,
+    "cover_top3_hit_rate_percent": 0.0,
+    "exterior_cover_rate_percent": 100.0,
+    "wrongful_gallery_deletions": 0
+  },
+  "confusion_matrices": {
+    "specific_category": {
+      "FRONT_3_4": {
+        "FRONT": 1
+      },
+      "FRONT": {
+        "FRONT": 1
+      },
+      "REAR_3_4": {
+        "FRONT": 1
+      },
+      "LEFT_SIDE": {
+        "FRONT": 1
+      },
+      "INTERIOR_FRONT": {
+        "FRONT": 1
+      },
+      "DASHBOARD": {
+        "FRONT": 1
+      },
+      "STEERING": {
+        "FRONT": 1
+      },
+      "ENGINE": {
+        "FRONT": 1
+      },
+      "WHEEL": {
+        "FRONT": 1
+      },
+      "TRUNK": {
+        "FRONT": 1
+      }
+    },
+    "macro_category": {
+      "EXTERIOR": {
+        "EXTERIOR": 4
+      },
+      "INTERIOR": {
+        "EXTERIOR": 4
+      },
+      "MECHANICAL": {
+        "EXTERIOR": 1
+      },
+      "DETAIL": {
+        "EXTERIOR": 1
+      }
+    },
+    "quality_status": {
+      "GOOD": {
+        "GOOD": 9,
+        "WARNING": 1
+      }
+    }
+  },
+  "thresholds_used": {
+    "quality_thresholds": {
+      "sharpness_weight": 0.25,
+      "brightness_weight": 0.15,
+      "contrast_weight": 0.15,
+      "exposure_weight": 0.1,
+      "composition_weight": 0.15,
+      "orientation_weight": 0.1,
+      "color_balance_weight": 0.1,
+      "good_status_threshold": 60.0,
+      "warning_status_threshold": 35.0,
+      "too_dark_brightness_max": 60.0,
+      "too_bright_brightness_min": 200.0,
+      "blurry_sharpness_max": 30.0,
+      "low_contrast_max": 25.0
+    },
+    "duplicate_thresholds": {
+      "hamming_distance_max": 3,
+      "histogram_similarity_min": 0.94,
+      "auto_delete_duplicates": false
+    },
+    "cover_selection": {
+      "category_weights": {
+        "FRONT_3_4": 40.0,
+        "FRONT": 35.0,
+        "REAR_3_4": 25.0,
+        "LEFT_SIDE": 20.0,
+        "RIGHT_SIDE": 20.0,
+        "REAR": 15.0,
+        "INTERIOR_FRONT": -35.0,
+        "INTERIOR_REAR": -40.0,
+        "DASHBOARD": -45.0,
+        "STEERING": -45.0,
+        "TRUNK": -60.0,
+        "ENGINE": -60.0,
+        "WHEEL": -60.0,
+        "KEY": -80.0,
+        "DOCUMENT": -100.0,
+        "UNKNOWN": 0.0
+      },
+      "duplicate_penalty": -10.0,
+      "bad_status_penalty": -30.0,
+      "warning_status_penalty": -15.0,
+      "portrait_orientation_penalty": -15.0
+    },
+    "gallery_coverage": {
+      "essential_checklist": [
+        "Front View",
+        "Rear View",
+        "Side View",
+        "Dashboard",
+        "Interior",
+        "Trunk",
+        "Engine",
+        "Wheel"
+      ]
+    }
+  },
+  "vehicles": [
+    {
+      "vehicle_id": "vehicle_01_mobi",
+      "photos_count": 10,
+      "chosen_cover": "IMG_010.jpg",
+      "human_top1_cover": "IMG_001.jpg",
+      "is_top1_correct": false,
+      "is_top3_correct": false,
+      "processing_time": 4.19
+    }
+  ]
+}

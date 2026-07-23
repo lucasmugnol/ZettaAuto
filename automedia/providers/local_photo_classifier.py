@@ -4,7 +4,7 @@ import os
 from typing import Optional
 from PIL import Image, ImageFilter, ImageStat, ImageOps
 from automedia.core.interfaces import IPhotoClassifier
-from automedia.core.models import ImageAsset, PhotoCategory, PhotoClassificationResult, PhotoQualityScore
+from automedia.core.models import ImageAsset, PhotoCategory, MacroCategory, PhotoClassificationResult, PhotoQualityScore
 
 
 class LocalPhotoClassifier(IPhotoClassifier):
@@ -36,7 +36,12 @@ class LocalPhotoClassifier(IPhotoClassifier):
 
         for keywords, category, conf, reason in filename_map:
             if any(kw in fname for kw in keywords):
-                return PhotoClassificationResult(category=category, confidence=conf, reason=reason)
+                return PhotoClassificationResult(
+                    category=category,
+                    macro_category=MacroCategory.get_macro(category),
+                    confidence=conf,
+                    reason=reason
+                )
 
         # 2. Visual feature classification for non-semantic filenames (IMG_001.jpg, DSC_100.jpg)
         try:
@@ -54,63 +59,56 @@ class LocalPhotoClassifier(IPhotoClassifier):
                 edge_stat = ImageStat.Stat(edges)
                 edge_density = edge_stat.mean[0]
 
-                # Wheel detail close-up (square aspect or small dimension, concentrated circular dark region)
                 if 0.85 <= aspect <= 1.15 and (w < 1000 or edge_density > 25.0):
+                    cat = PhotoCategory.WHEEL
                     return PhotoClassificationResult(
-                        category=PhotoCategory.WHEEL,
+                        category=cat,
+                        macro_category=MacroCategory.get_macro(cat),
                         confidence=0.72,
                         reason="Visual classification: close-up wheel detail (square aspect, high edge density)"
                     )
 
-                # Engine bay (very high edge complexity across entire image)
                 if edge_density > 35.0 and stddev_contrast > 55.0:
+                    cat = PhotoCategory.ENGINE
                     return PhotoClassificationResult(
-                        category=PhotoCategory.ENGINE,
+                        category=cat,
+                        macro_category=MacroCategory.get_macro(cat),
                         confidence=0.75,
                         reason="Visual classification: engine bay (high edge complexity and contrast variance)"
                     )
 
-                # Dashboard or steering wheel (dark cabin background with high local contrast)
                 if mean_brightness < 70.0 and stddev_contrast > 45.0:
-                    if aspect < 1.1:
-                        return PhotoClassificationResult(
-                            category=PhotoCategory.STEERING,
-                            confidence=0.70,
-                            reason="Visual classification: steering wheel / instrument cluster"
-                        )
+                    cat = PhotoCategory.STEERING if aspect < 1.1 else PhotoCategory.DASHBOARD
                     return PhotoClassificationResult(
-                        category=PhotoCategory.DASHBOARD,
-                        confidence=0.73,
+                        category=cat,
+                        macro_category=MacroCategory.get_macro(cat),
+                        confidence=0.71,
                         reason="Visual classification: dashboard cabin lighting profile"
                     )
 
-                # Interior seats / Cabin (low to moderate brightness, smooth tone gradients)
                 if mean_brightness < 90.0:
+                    cat = PhotoCategory.INTERIOR_FRONT
                     return PhotoClassificationResult(
-                        category=PhotoCategory.INTERIOR_FRONT,
+                        category=cat,
+                        macro_category=MacroCategory.get_macro(cat),
                         confidence=0.68,
                         reason="Visual classification: interior cabin lighting profile"
                     )
 
-                # Exterior vehicle photos (landscape orientation, good environment brightness)
                 if aspect >= 1.25 and mean_brightness >= 90.0:
-                    # Differentiate front/3_4 vs rear based on top vs bottom brightness/saturation
-                    if aspect >= 1.4:
-                        return PhotoClassificationResult(
-                            category=PhotoCategory.FRONT_3_4,
-                            confidence=0.78,
-                            reason="Visual classification: exterior 3/4 perspective view"
-                        )
+                    cat = PhotoCategory.FRONT_3_4 if aspect >= 1.4 else PhotoCategory.FRONT
                     return PhotoClassificationResult(
-                        category=PhotoCategory.FRONT,
+                        category=cat,
+                        macro_category=MacroCategory.get_macro(cat),
                         confidence=0.75,
-                        reason="Visual classification: exterior front perspective view"
+                        reason="Visual classification: exterior perspective view"
                     )
         except Exception:
             pass
 
         return PhotoClassificationResult(
             category=PhotoCategory.UNKNOWN,
+            macro_category=MacroCategory.UNKNOWN,
             confidence=0.40,
             reason="Default category fallback"
         )
