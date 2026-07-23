@@ -17,9 +17,11 @@ class LocalImageProvider(IImageProvider):
         adjustment_intensity: float,
         quality: int = 90
     ) -> bool:
+        if not image_path or not os.path.exists(image_path) or os.path.getsize(image_path) == 0:
+            raise ProcessingError(f"Image source file missing or zero-length: '{image_path}'")
+
         try:
             with Image.open(image_path) as img:
-                # Fix EXIF orientation if present
                 img = ImageOps.exif_transpose(img)
                 if img.mode != "RGB":
                     img = img.convert("RGB")
@@ -159,6 +161,10 @@ class LocalImageProvider(IImageProvider):
         cover_fit_strategy: str = "contain",
         bg_fill_strategy: str = "blurred"
     ) -> bool:
+        # Strict validation of source image
+        if not main_image_path or not os.path.exists(main_image_path) or os.path.getsize(main_image_path) == 0:
+            raise CoverFailureError(f"Cover source image file missing or zero-length: '{main_image_path}'")
+
         try:
             tw, th = target_dimensions
             canvas = Image.new("RGB", (tw, th), color=brand_config.primary_color)
@@ -174,24 +180,41 @@ class LocalImageProvider(IImageProvider):
                 if cover_fit_strategy == "crop":
                     fitted_photo = ImageOps.fit(main_rgb, (tw, photo_height), Image.Resampling.LANCZOS)
                 else:
-                    # DEFAULT: contain strategy with safety margin & auto offset (guarantees zero vehicle edge clipping)
-                    safe_tw = int(tw * 0.92)
-                    safe_ph = int(photo_height * 0.92)
+                    # DEFAULT: Composite contain strategy with active content bounding box & safety margin
+                    bbox = self._detect_content_bbox(main_rgb)
+                    content_center_x = (bbox[0] + bbox[2]) / 2.0
+                    content_center_y = (bbox[1] + bbox[3]) / 2.0
+
+                    # 5% safety margin around canvas edges
+                    safe_tw = int(tw * 0.90)
+                    safe_ph = int(photo_height * 0.90)
+
                     scale = min(safe_tw / float(orig_w), safe_ph / float(orig_h))
                     scaled_w = max(1, int(orig_w * scale))
                     scaled_h = max(1, int(orig_h * scale))
                     scaled_img = main_rgb.resize((scaled_w, scaled_h), Image.Resampling.LANCZOS)
 
                     if bg_fill_strategy == "blurred":
-                        # Blurred background container derived from the image itself
                         bg_img = ImageOps.fit(main_rgb, (tw, photo_height), Image.Resampling.LANCZOS)
                         bg_blurred = bg_img.filter(ImageFilter.GaussianBlur(radius=35))
                         fitted_photo = bg_blurred
                     else:
                         fitted_photo = Image.new("RGB", (tw, photo_height), color=brand_config.primary_color)
 
-                    offset_x = (tw - scaled_w) // 2
-                    offset_y = (photo_height - scaled_h) // 2
+                    # Compute auto-offset to center vehicle subject
+                    scaled_center_x = content_center_x * scale
+                    scaled_center_y = content_center_y * scale
+
+                    target_center_x = tw / 2.0
+                    target_center_y = photo_height / 2.0
+
+                    offset_x = int(target_center_x - scaled_center_x)
+                    offset_y = int(target_center_y - scaled_center_y)
+
+                    # Clamp offsets so image does not float off canvas bounds
+                    offset_x = max(0, min(offset_x, tw - scaled_w))
+                    offset_y = max(0, min(offset_y, photo_height - scaled_h))
+
                     fitted_photo.paste(scaled_img, (offset_x, offset_y))
 
                 canvas.paste(fitted_photo, (0, 0))
@@ -234,7 +257,7 @@ class LocalImageProvider(IImageProvider):
             price_str = f"{vehicle_data.price}"
             price_str = self._truncate_text(draw, price_str, font_price, text_max_w)
 
-            # Draw lines
+            # Draw text lines
             curr_y = content_y
             draw.text((padding_x, curr_y), title_str, fill=brand_config.text_color, font=font_title)
             curr_y += font_title_size + 4
@@ -274,6 +297,22 @@ class LocalImageProvider(IImageProvider):
         except Exception as e:
             raise CoverFailureError(f"Failed to compose cover image: {str(e)}")
 
+    def _detect_content_bbox(self, img: Image.Image) -> Tuple[int, int, int, int]:
+        w, h = img.size
+        try:
+            gray = img.convert("L")
+            edges = gray.filter(ImageFilter.FIND_EDGES)
+            mask = edges.point(lambda p: 255 if p > 25 else 0)
+            bbox = mask.getbbox()
+            if bbox:
+                bw = bbox[2] - bbox[0]
+                bh = bbox[3] - bbox[1]
+                if bw > w * 0.20 and bh > h * 0.20:
+                    return bbox
+        except Exception:
+            pass
+        return 0, 0, w, h
+
     def _load_font(self, font_path: Optional[str], size: int) -> ImageFont.ImageFont:
         if font_path and os.path.exists(font_path):
             try:
@@ -281,7 +320,6 @@ class LocalImageProvider(IImageProvider):
             except Exception:
                 pass
 
-        # Try common OS TrueType system fonts
         system_fonts = [
             "arial.ttf", "DejaVuSans.ttf", "segoeui.ttf",
             "helvetica.ttf", "Calibri.ttf", "FreeSans.ttf"
@@ -292,7 +330,6 @@ class LocalImageProvider(IImageProvider):
             except Exception:
                 continue
 
-        # Fallback to PIL default
         return ImageFont.load_default()
 
     def _truncate_text(self, draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_w: int) -> str:
