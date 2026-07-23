@@ -1,0 +1,23 @@
+{
+  "accepted_formats": [".jpg", ".jpeg", ".png", ".webp"],
+  "export_quality": 90,
+  "cover_dimensions": {
+    "width": 1080,
+    "height": 1080
+  },
+  "secondary_dimensions": {
+    "width": 1080,
+    "height": 1080
+  },
+  "adjustment_intensity": 0.1,
+  "plate_cover_strategy": "solid_cover",
+  "watermark_policy": {
+    "position": "bottom_right",
+    "margin_pixels": 25,
+    "scale_ratio": 0.18
+  },
+  "min_width": 300,
+  "min_height": 300,
+  "max_file_size_mb": 25.0,
+  "ttl_hours": 24
+}

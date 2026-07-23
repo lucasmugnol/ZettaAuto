@@ -1,0 +1,24 @@
+{
+  "manufacturer": "Toyota",
+  "model": "Corolla XEi 2.0 Flex",
+  "year": 2022,
+  "price": "R$ 119.900,00",
+  "description": "Veículo revisado em concessionária, único dono, laudo cautelar 100% aprovado.",
+  "optional_features": [
+    "Ar-condicionado digital dual zone",
+    "Central multimídia touchscreen de 8 polegadas",
+    "Bancos revestidos em couro",
+    "Piloto automático adaptativo (ACC)",
+    "Câmera de ré e sensores de estacionamento"
+  ],
+  "cover_image": null,
+  "plate_regions": [
+    {
+      "file": "car_front.jpg",
+      "x": 380,
+      "y": 520,
+      "width": 140,
+      "height": 45
+    }
+  ]
+}

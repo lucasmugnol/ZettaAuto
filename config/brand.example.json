@@ -1,0 +1,10 @@
+{
+  "company_name": "AutoMedia Motors",
+  "primary_color": "#1E3A8A",
+  "secondary_color": "#F97316",
+  "text_color": "#FFFFFF",
+  "logo_path": "samples/logo_sample.png",
+  "watermark_opacity": 0.35,
+  "contact": "(11) 99999-8888",
+  "cta": "Fale com nossos consultores no WhatsApp!"
+}
