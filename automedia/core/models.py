@@ -72,6 +72,7 @@ class BrandConfig:
     secondary_color: str = "#F97316"
     text_color: str = "#FFFFFF"
     logo_path: Optional[str] = None
+    font_path: Optional[str] = None
     watermark_opacity: float = 0.35
     contact: str = ""
     cta: str = ""
@@ -85,6 +86,8 @@ class PipelineConfig:
     secondary_dimensions: Dict[str, int] = field(default_factory=lambda: {"width": 1080, "height": 1080})
     adjustment_intensity: float = 0.1
     plate_cover_strategy: str = "solid_cover"  # "solid_cover", "blur"
+    cover_fit_strategy: str = "contain"  # "contain", "crop"
+    bg_fill_strategy: str = "blurred"  # "blurred", "solid"
     watermark_policy: Dict[str, Any] = field(default_factory=lambda: {
         "position": "bottom_right",
         "margin_pixels": 25,
@@ -147,7 +150,7 @@ class Job:
     job_id: str
     input_path: str
     output_path: str
-    status: str = "DRAFT"  # "DRAFT", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"
+    status: str = "PENDING"  # "PENDING", "RUNNING", "PARTIAL", "COMPLETED", "FAILED"
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
     total_images: int = 0
@@ -185,6 +188,8 @@ class BenchmarkResult:
     failed_images: int
     initial_memory_mb: Optional[float] = None
     peak_memory_mb: Optional[float] = None
+    cpu_user_seconds: Optional[float] = None
+    cpu_system_seconds: Optional[float] = None
     cpu_usage_percent: Optional[float] = None
     total_input_bytes: int = 0
     total_output_bytes: int = 0
@@ -201,11 +206,14 @@ class BenchmarkResult:
             "failed_images": self.failed_images,
             "initial_memory_mb": round(self.initial_memory_mb, 2) if self.initial_memory_mb is not None else None,
             "peak_memory_mb": round(self.peak_memory_mb, 2) if self.peak_memory_mb is not None else None,
+            "cpu_user_seconds": round(self.cpu_user_seconds, 4) if self.cpu_user_seconds is not None else None,
+            "cpu_system_seconds": round(self.cpu_system_seconds, 4) if self.cpu_system_seconds is not None else None,
             "cpu_usage_percent": round(self.cpu_usage_percent, 2) if self.cpu_usage_percent is not None else None,
             "total_input_bytes": self.total_input_bytes,
             "total_output_bytes": self.total_output_bytes,
             "warnings": self.warnings
         }
+
 
 
 @dataclass

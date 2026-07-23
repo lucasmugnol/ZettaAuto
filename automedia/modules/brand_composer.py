@@ -24,7 +24,9 @@ class BrandComposer:
             brand_config=brand_config,
             vehicle_data=vehicle_data,
             target_dimensions=target_dimensions,
-            quality=self.config.export_quality
+            quality=self.config.export_quality,
+            cover_fit_strategy=getattr(self.config, "cover_fit_strategy", "contain"),
+            bg_fill_strategy=getattr(self.config, "bg_fill_strategy", "blurred")
         )
 
     def apply_watermark(

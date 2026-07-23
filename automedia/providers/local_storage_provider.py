@@ -26,13 +26,22 @@ class LocalStorageProvider(IStorageProvider):
     def create_zip_archive(self, folder_path: str, zip_output_path: str) -> str:
         try:
             os.makedirs(os.path.dirname(zip_output_path), exist_ok=True)
+            abs_zip = os.path.abspath(zip_output_path)
+
             with zipfile.ZipFile(zip_output_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-                for root, _, files in os.walk(folder_path):
+                for root, dirs, files in os.walk(folder_path):
+                    # Filter out unwanted subdirectories
+                    dirs[:] = [d for d in dirs if d not in (".venv", ".pytest_cache", "__pycache__", "logs", "temp")]
+
                     for file in files:
-                        full_path = os.path.join(root, file)
-                        # Do not include the zip itself inside the zip if created in the same folder
-                        if full_path == zip_output_path:
+                        full_path = os.path.abspath(os.path.join(root, file))
+
+                        # Exclude zip itself, temporary files, and dotfiles
+                        if full_path == abs_zip:
                             continue
+                        if file.endswith(".tmp") or file.startswith("temp_") or file.startswith("."):
+                            continue
+
                         arcname = os.path.relpath(full_path, folder_path)
                         zipf.write(full_path, arcname)
             return zip_output_path

@@ -57,16 +57,16 @@ class LocalPipeline:
             job_id=job_id,
             input_path=os.path.abspath(input_dir),
             output_path=os.path.abspath(output_dir),
-            status="RUNNING",
+            status="PENDING",
             started_at=datetime.datetime.now(datetime.timezone.utc).isoformat()
         )
 
+        job.status = "RUNNING"
         benchmark = BenchmarkCollector()
         benchmark.start_measurement()
 
         warnings: List[str] = []
         errors: List[str] = []
-        stages_executed: List[StageResult] = []
 
         try:
             # Stage 0: Load Configurations
@@ -96,7 +96,6 @@ class LocalPipeline:
             vision_results = vision_module.analyze(valid_assets, vehicle_data)
             benchmark.record_stage("vision_analysis", time.time() - t0)
 
-            # Determine cover image asset & secondary gallery assets
             cover_analysis = next((r for r in vision_results if r.recommended_as_cover), vision_results[0])
             cover_asset = next(a for a in valid_assets if a.filename.lower() == cover_analysis.file.lower())
 
@@ -119,27 +118,28 @@ class LocalPipeline:
             )
 
             temp_cover_path = os.path.join(job_output_dir, "temp_cover.jpg")
-            image_processor.process_image(cover_asset, temp_cover_path, cover_target_dims)
+            final_cover_path = os.path.join(job_output_dir, "cover.jpg")
 
-            if cover_analysis.plate_regions:
-                image_processor.apply_plate_cover(
-                    temp_cover_path, temp_cover_path, cover_analysis.plate_regions, brand_cfg.primary_color
+            try:
+                image_processor.process_image(cover_asset, temp_cover_path, cover_target_dims)
+
+                if cover_analysis.plate_regions:
+                    image_processor.apply_plate_cover(
+                        temp_cover_path, temp_cover_path, cover_analysis.plate_regions, brand_cfg.primary_color
+                    )
+
+                cover_ok = brand_composer.compose_cover(
+                    main_image_path=temp_cover_path,
+                    output_path=final_cover_path,
+                    brand_config=brand_cfg,
+                    vehicle_data=vehicle_data,
+                    target_dimensions=cover_target_dims
                 )
 
-            final_cover_path = os.path.join(job_output_dir, "cover.jpg")
-            cover_ok = brand_composer.compose_cover(
-                main_image_path=temp_cover_path,
-                output_path=final_cover_path,
-                brand_config=brand_cfg,
-                vehicle_data=vehicle_data,
-                target_dimensions=cover_target_dims
-            )
-
-            if os.path.exists(temp_cover_path):
-                os.remove(temp_cover_path)
-
-            if not cover_ok or not os.path.exists(final_cover_path):
-                raise CoverFailureError("Cover image composition failed completely.")
+                if not cover_ok or not os.path.exists(final_cover_path):
+                    raise CoverFailureError("Cover image composition failed completely.")
+            finally:
+                self._safe_remove(temp_cover_path, warnings)
 
             benchmark.record_stage("cover_processing", time.time() - t0)
 
@@ -158,24 +158,18 @@ class LocalPipeline:
                 g_analysis = next((r for r in gallery_analyses if r.file.lower() == g_asset.filename.lower()), None)
                 out_name = f"photo_{idx:02d}.jpg"
                 out_path = os.path.join(photos_output_dir, out_name)
+                temp_g_path = os.path.join(photos_output_dir, f"temp_{out_name}")
 
                 try:
-                    # 1. Resize & Color adjust
-                    temp_g_path = os.path.join(photos_output_dir, f"temp_{out_name}")
                     image_processor.process_image(g_asset, temp_g_path, sec_target_dims)
 
-                    # 2. Plate Cover if any
                     plate_regs = g_analysis.plate_regions if g_analysis else []
                     if plate_regs:
                         image_processor.apply_plate_cover(
                             temp_g_path, temp_g_path, plate_regs, brand_cfg.primary_color
                         )
 
-                    # 3. Watermark
                     brand_composer.apply_watermark(temp_g_path, out_path, brand_cfg)
-
-                    if os.path.exists(temp_g_path):
-                        os.remove(temp_g_path)
 
                     exported_gallery_files.append(out_path)
                     successful_count += 1
@@ -184,6 +178,8 @@ class LocalPipeline:
                     msg = f"Failed processing secondary photo '{g_asset.filename}': {str(e)}"
                     warnings.append(msg)
                     job.failed_images += 1
+                finally:
+                    self._safe_remove(temp_g_path, warnings)
 
             job.successful_images = successful_count
             benchmark.record_stage("gallery_processing", time.time() - t0)
@@ -195,28 +191,28 @@ class LocalPipeline:
             title_file, desc_file = exporter.export_text_artifacts(job_output_dir, title, description)
             benchmark.record_stage("text_generation", time.time() - t0)
 
-            # Stage 8: Manifest & Benchmark Export
+            # Stage 8: Package Output ZIP
             t0 = time.time()
-            total_input_bytes = sum(a.file_size_bytes for a in raw_assets)
-            total_output_bytes = self._compute_folder_size(job_output_dir)
+            zip_path = exporter.package_final_output(job_output_dir)
+            benchmark.record_stage("export_and_packaging", time.time() - t0)
 
-            bench_result = benchmark.finish_measurement(
-                total_images=len(raw_assets),
-                processed_images=successful_count,
-                failed_images=job.failed_images,
-                total_input_bytes=total_input_bytes,
-                total_output_bytes=total_output_bytes
-            )
+            # Determine Final Job Status
+            if job.failed_images > 0:
+                final_status = "PARTIAL"
+                warnings.append(f"Job finished with status PARTIAL: {job.failed_images} image(s) failed processing.")
+            else:
+                final_status = "COMPLETED"
 
-            benchmark.write_benchmark(job_output_dir, bench_result)
+            job.status = final_status
+            job.finished_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
+            # Stage 9: Write Manifest (Atomic)
             manifest_data = {
                 "job_id": job_id,
                 "pipeline_version": job.pipeline_version,
-                "status": "COMPLETED",
+                "status": final_status,
                 "started_at": job.started_at,
-                "finished_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                "duration_seconds": bench_result.total_duration_seconds,
+                "finished_at": job.finished_at,
                 "config_summary": {
                     "brand": brand_cfg.company_name,
                     "vehicle": f"{vehicle_data.manufacturer} {vehicle_data.model}",
@@ -229,7 +225,8 @@ class LocalPipeline:
                     "title.txt",
                     "description.txt",
                     "manifest.json",
-                    "benchmark.json"
+                    "benchmark.json",
+                    "vehicle_media_package.zip"
                 ] + [os.path.relpath(p, job_output_dir) for p in exported_gallery_files],
                 "selected_cover_file": cover_asset.filename,
                 "cover_selection_method": "vehicle_config" if (vehicle_data.cover_image and vehicle_data.cover_image.lower() == cover_asset.filename.lower()) else "quality_score_rank",
@@ -248,12 +245,20 @@ class LocalPipeline:
             manifest_writer = ManifestWriter()
             manifest_path = manifest_writer.write_manifest(job_output_dir, manifest_data)
 
-            # Stage 9: Package Output ZIP
-            zip_path = exporter.package_final_output(job_output_dir)
-            benchmark.record_stage("export_and_packaging", time.time() - t0)
+            # Stage 10: Benchmark Measurement & Export (Atomic)
+            total_input_bytes = sum(a.file_size_bytes for a in raw_assets)
+            total_output_bytes = self._compute_folder_size(job_output_dir)
 
-            job.status = "COMPLETED"
-            job.finished_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            bench_result = benchmark.finish_measurement(
+                total_images=len(raw_assets),
+                processed_images=successful_count,
+                failed_images=job.failed_images,
+                total_input_bytes=total_input_bytes,
+                total_output_bytes=total_output_bytes
+            )
+
+            benchmark_path = benchmark.write_benchmark(job_output_dir, bench_result)
+
             job.warnings = warnings
 
             res = ProcessingResult(
@@ -264,7 +269,7 @@ class LocalPipeline:
                 text_title_file=title_file,
                 text_desc_file=desc_file,
                 manifest_file=manifest_path,
-                benchmark_file=os.path.join(job_output_dir, "benchmark.json"),
+                benchmark_file=benchmark_path,
                 warnings=warnings,
                 errors=[]
             )
@@ -283,6 +288,13 @@ class LocalPipeline:
                 errors=[err_msg]
             )
             return job, res
+
+    def _safe_remove(self, file_path: str, warnings: List[str]):
+        if file_path and os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                warnings.append(f"Failed to remove temporary file '{file_path}': {str(e)}")
 
     def _load_configs(
         self, brand_path: str, vehicle_path: str, pipeline_path: str

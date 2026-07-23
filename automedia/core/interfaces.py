@@ -67,7 +67,9 @@ class IImageProvider(ABC):
         brand_config: BrandConfig,
         vehicle_data: VehicleData,
         target_dimensions: Tuple[int, int],
-        quality: int = 90
+        quality: int = 90,
+        cover_fit_strategy: str = "contain",
+        bg_fill_strategy: str = "blurred"
     ) -> bool:
         """Compose the primary cover image with brand layout and vehicle data."""
         pass

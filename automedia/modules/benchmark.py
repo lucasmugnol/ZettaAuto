@@ -22,6 +22,10 @@ class BenchmarkCollector:
         self.warnings: List[str] = []
         self.initial_memory_mb: Optional[float] = None
         self.peak_memory_mb: Optional[float] = None
+        self.start_cpu_times: Optional[Any] = None
+        self.end_cpu_times: Optional[Any] = None
+        self.cpu_user_seconds: Optional[float] = None
+        self.cpu_system_seconds: Optional[float] = None
         self.cpu_usage_percent: Optional[float] = None
 
     def start_measurement(self):
@@ -31,6 +35,7 @@ class BenchmarkCollector:
                 process = psutil.Process()
                 self.initial_memory_mb = process.memory_info().rss / (1024 * 1024)
                 self.peak_memory_mb = self.initial_memory_mb
+                self.start_cpu_times = process.cpu_times()
                 self.cpu_usage_percent = psutil.cpu_percent(interval=None)
             except Exception as e:
                 self.warnings.append(f"Memory/CPU measurement warning: {str(e)}")
@@ -54,8 +59,21 @@ class BenchmarkCollector:
         total_output_bytes: int
     ) -> BenchmarkResult:
         self.end_time = time.time()
-        total_duration = self.end_time - self.start_time
+        wall_duration = self.end_time - self.start_time
+        stages_sum = sum(self.stage_durations.values())
+        total_duration = max(wall_duration, stages_sum, 0.0001)
         self._update_peak_memory()
+
+        if PSUTIL_AVAILABLE and self.start_cpu_times:
+            try:
+                process = psutil.Process()
+                self.end_cpu_times = process.cpu_times()
+                if hasattr(self.end_cpu_times, "user") and hasattr(self.start_cpu_times, "user"):
+                    self.cpu_user_seconds = max(0.0, self.end_cpu_times.user - self.start_cpu_times.user)
+                if hasattr(self.end_cpu_times, "system") and hasattr(self.start_cpu_times, "system"):
+                    self.cpu_system_seconds = max(0.0, self.end_cpu_times.system - self.start_cpu_times.system)
+            except Exception:
+                pass
 
         avg_duration = (
             total_duration / processed_images
@@ -73,6 +91,8 @@ class BenchmarkCollector:
             failed_images=failed_images,
             initial_memory_mb=self.initial_memory_mb,
             peak_memory_mb=self.peak_memory_mb,
+            cpu_user_seconds=self.cpu_user_seconds,
+            cpu_system_seconds=self.cpu_system_seconds,
             cpu_usage_percent=self.cpu_usage_percent,
             total_input_bytes=total_input_bytes,
             total_output_bytes=total_output_bytes,
@@ -91,6 +111,23 @@ class BenchmarkCollector:
 
     def write_benchmark(self, job_dir: str, result: BenchmarkResult) -> str:
         benchmark_path = os.path.join(job_dir, "benchmark.json")
-        with open(benchmark_path, "w", encoding="utf-8") as f:
-            json.dump(result.to_dict(), f, indent=2, ensure_ascii=False)
-        return benchmark_path
+        tmp_path = benchmark_path + ".tmp"
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(result.to_dict(), f, indent=2, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+
+            # Validate serialization before replace
+            with open(tmp_path, "r", encoding="utf-8") as f:
+                json.load(f)
+
+            os.replace(tmp_path, benchmark_path)
+            return benchmark_path
+        except Exception:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+            raise
