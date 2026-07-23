@@ -4,6 +4,127 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 
 
+class PhotoCategory:
+    FRONT = "FRONT"
+    FRONT_3_4 = "FRONT_3_4"
+    REAR = "REAR"
+    REAR_3_4 = "REAR_3_4"
+    LEFT_SIDE = "LEFT_SIDE"
+    RIGHT_SIDE = "RIGHT_SIDE"
+    INTERIOR_FRONT = "INTERIOR_FRONT"
+    INTERIOR_REAR = "INTERIOR_REAR"
+    DASHBOARD = "DASHBOARD"
+    STEERING = "STEERING"
+    TRUNK = "TRUNK"
+    ENGINE = "ENGINE"
+    WHEEL = "WHEEL"
+    KEY = "KEY"
+    DOCUMENT = "DOCUMENT"
+    UNKNOWN = "UNKNOWN"
+
+    ALL_CATEGORIES = [
+        FRONT, FRONT_3_4, REAR, REAR_3_4, LEFT_SIDE, RIGHT_SIDE,
+        INTERIOR_FRONT, INTERIOR_REAR, DASHBOARD, STEERING,
+        TRUNK, ENGINE, WHEEL, KEY, DOCUMENT, UNKNOWN
+    ]
+
+
+@dataclass
+class PhotoQualityScore:
+    overall_score: float = 0.0
+    sharpness: float = 0.0
+    brightness: float = 0.0
+    contrast: float = 0.0
+    exposure: float = 0.0
+    noise: float = 0.0
+    reflection_score: float = 0.0
+    composition_score: float = 0.0
+    orientation_score: float = 0.0
+    color_balance: float = 0.0
+    status: str = "GOOD"  # "GOOD", "WARNING", "BAD"
+    quality_issues: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "overall_score": round(self.overall_score, 2),
+            "sharpness": round(self.sharpness, 2),
+            "brightness": round(self.brightness, 2),
+            "contrast": round(self.contrast, 2),
+            "exposure": round(self.exposure, 2),
+            "noise": round(self.noise, 2),
+            "reflection_score": round(self.reflection_score, 2),
+            "composition_score": round(self.composition_score, 2),
+            "orientation_score": round(self.orientation_score, 2),
+            "color_balance": round(self.color_balance, 2),
+            "status": self.status,
+            "quality_issues": self.quality_issues
+        }
+
+
+@dataclass
+class PhotoClassificationResult:
+    category: str = PhotoCategory.UNKNOWN
+    confidence: float = 0.0
+    reason: str = "Heuristic classification"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "category": self.category,
+            "confidence": round(self.confidence, 2),
+            "reason": self.reason
+        }
+
+
+@dataclass
+class DuplicateGroup:
+    group_id: str
+    primary_file: str
+    duplicate_files: List[str]
+    similarity_score: float
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "group_id": self.group_id,
+            "primary_file": self.primary_file,
+            "duplicate_files": self.duplicate_files,
+            "similarity_score": round(self.similarity_score, 2)
+        }
+
+
+@dataclass
+class GalleryCoverage:
+    present_categories: List[str] = field(default_factory=list)
+    missing_categories: List[str] = field(default_factory=list)
+    coverage_score: float = 0.0
+    category_counts: Dict[str, int] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "present_categories": self.present_categories,
+            "missing_categories": self.missing_categories,
+            "coverage_score": round(self.coverage_score, 2),
+            "category_counts": self.category_counts
+        }
+
+
+@dataclass
+class CoverSelectionResult:
+    selected_file: str
+    score: float
+    rank: int
+    reason: str
+    ranking_candidates: List[Dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "selected_file": self.selected_file,
+            "score": round(self.score, 2),
+            "rank": self.rank,
+            "reason": self.reason,
+            "ranking_candidates": self.ranking_candidates
+        }
+
+
 @dataclass
 class PlateRegion:
     file: str
@@ -65,6 +186,7 @@ class VehicleData:
     cover_image: Optional[str] = None
     plate_regions: List[PlateRegion] = field(default_factory=list)
 
+
 @dataclass
 class BrandConfig:
     company_name: str
@@ -112,8 +234,14 @@ class VisionAnalysis:
     low_confidence: bool = False
     plate_detection_method: str = "not_found"  # "manual", "auto", "not_found"
 
+    # Sprint 2 Visual Intelligence Extensions
+    detailed_quality: Optional[PhotoQualityScore] = None
+    classification: Optional[PhotoClassificationResult] = None
+    is_near_duplicate: bool = False
+    near_duplicate_of: Optional[str] = None
+
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d = {
             "file": self.file,
             "vehicle_bbox": self.vehicle_bbox,
             "plate_regions": [p.to_dict() for p in self.plate_regions],
@@ -123,8 +251,15 @@ class VisionAnalysis:
             "contrast_score": round(self.contrast_score, 2),
             "recommended_as_cover": self.recommended_as_cover,
             "low_confidence": self.low_confidence,
-            "plate_detection_method": self.plate_detection_method
+            "plate_detection_method": self.plate_detection_method,
+            "is_near_duplicate": self.is_near_duplicate,
+            "near_duplicate_of": self.near_duplicate_of
         }
+        if self.detailed_quality:
+            d["detailed_quality"] = self.detailed_quality.to_dict()
+        if self.classification:
+            d["classification"] = self.classification.to_dict()
+        return d
 
 
 @dataclass
@@ -213,7 +348,6 @@ class BenchmarkResult:
             "total_output_bytes": self.total_output_bytes,
             "warnings": self.warnings
         }
-
 
 
 @dataclass

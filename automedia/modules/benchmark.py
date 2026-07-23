@@ -43,7 +43,7 @@ class BenchmarkCollector:
             self.warnings.append("psutil library not available; system memory/CPU metrics set to null.")
 
     def record_stage(self, stage_name: str, duration_seconds: float):
-        self.stage_durations[stage_name] = duration_seconds
+        self.stage_durations[stage_name] = max(0.0001, round(duration_seconds, 4))
         self._update_peak_memory()
 
     def record_image(self, image_filename: str, duration_seconds: float):

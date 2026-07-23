@@ -1,19 +1,23 @@
 """Local vision provider implementation for basic visual analysis."""
 
-import math
 from typing import List, Optional
 from PIL import Image, ImageFilter, ImageStat
 from automedia.core.interfaces import IVisionProvider
 from automedia.core.models import ImageAsset, VehicleData, VisionAnalysis, PlateRegion
+from automedia.providers.local_photo_analyzer import LocalPhotoAnalyzer
+from automedia.providers.local_photo_classifier import LocalPhotoClassifier
 
 
 class LocalVisionProvider(IVisionProvider):
+    def __init__(self, analyzer=None, classifier=None):
+        self.analyzer = analyzer or LocalPhotoAnalyzer()
+        self.classifier = classifier or LocalPhotoClassifier()
+
     def analyze_batch(
         self, images: List[ImageAsset], vehicle_data: VehicleData
     ) -> List[VisionAnalysis]:
         results: List[VisionAnalysis] = []
 
-        # Find manual plate regions from vehicle_data if any
         manual_plate_map = {}
         if vehicle_data and vehicle_data.plate_regions:
             for pr in vehicle_data.plate_regions:
@@ -26,10 +30,9 @@ class LocalVisionProvider(IVisionProvider):
             analysis = self._analyze_single_image(asset, manual_plate_map.get(asset.filename.lower()))
             results.append(analysis)
 
-        # Cover selection logic
+        # Basic fallback recommendation if needed
         selected_cover = None
         if vehicle_data and vehicle_data.cover_image:
-            # Look for explicit cover image match
             target = vehicle_data.cover_image.lower()
             for res in results:
                 if res.file.lower() == target:
@@ -38,7 +41,6 @@ class LocalVisionProvider(IVisionProvider):
                     break
 
         if not selected_cover and results:
-            # Recommend image with highest quality_score
             best_res = max(results, key=lambda r: r.quality_score)
             best_res.recommended_as_cover = True
 
@@ -55,18 +57,20 @@ class LocalVisionProvider(IVisionProvider):
 
         sharpness, brightness, contrast = self._calculate_image_metrics(asset.path)
 
-        # Quality score composite:
-        # Ideal brightness ~ 128 (scale 0-100)
+        # Quality score composite
         brightness_penalty = abs(brightness - 128) / 128.0 * 30.0
         contrast_score = min(contrast, 100.0) / 100.0 * 35.0
         sharpness_score = min(sharpness, 100.0) / 100.0 * 35.0
         quality_score = max(0.0, min(100.0, sharpness_score + contrast_score + 30.0 - brightness_penalty))
 
-        # Horizontal/Landscape photos generally get a slight preference for cover
         if asset.orientation == "landscape":
             quality_score = min(100.0, quality_score * 1.1)
 
         low_confidence = quality_score < 30.0
+
+        # Detailed quality score and classification
+        detailed_q = self.analyzer.analyze_quality(asset.path, asset)
+        classification = self.classifier.classify_photo(asset.path, asset, detailed_q)
 
         return VisionAnalysis(
             file=asset.filename,
@@ -78,7 +82,9 @@ class LocalVisionProvider(IVisionProvider):
             contrast_score=contrast,
             recommended_as_cover=False,
             low_confidence=low_confidence,
-            plate_detection_method=detection_method
+            plate_detection_method=detection_method,
+            detailed_quality=detailed_q,
+            classification=classification
         )
 
     def _calculate_image_metrics(self, image_path: str):
@@ -90,7 +96,6 @@ class LocalVisionProvider(IVisionProvider):
                 brightness = stat.mean[0]
                 contrast = stat.stddev[0]
 
-                # Sharpness estimation via edge magnitude variance
                 edges = gray.filter(ImageFilter.FIND_EDGES)
                 edge_stat = ImageStat.Stat(edges)
                 sharpness = edge_stat.var[0] ** 0.5

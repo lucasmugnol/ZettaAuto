@@ -3,8 +3,40 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Tuple, Optional
 from automedia.core.models import (
-    ImageAsset, VehicleData, BrandConfig, PipelineConfig, VisionAnalysis, PlateRegion
+    ImageAsset, VehicleData, BrandConfig, PipelineConfig, VisionAnalysis, PlateRegion,
+    PhotoQualityScore, PhotoClassificationResult, DuplicateGroup
 )
+
+
+class IPhotoAnalyzer(ABC):
+    """Port for detailed photo quality analysis."""
+
+    @abstractmethod
+    def analyze_quality(self, image_path: str, asset: ImageAsset) -> PhotoQualityScore:
+        """Analyze detailed quality metrics of a photo."""
+        pass
+
+
+class IPhotoClassifier(ABC):
+    """Port for vehicle photo category classification."""
+
+    @abstractmethod
+    def classify_photo(
+        self, image_path: str, asset: ImageAsset, quality_score: Optional[PhotoQualityScore] = None
+    ) -> PhotoClassificationResult:
+        """Classify a vehicle photo into a category."""
+        pass
+
+
+class IDuplicateDetector(ABC):
+    """Port for perceptual near-duplicate detection."""
+
+    @abstractmethod
+    def detect_duplicates(
+        self, assets: List[ImageAsset], quality_scores: Dict[str, PhotoQualityScore]
+    ) -> Tuple[List[DuplicateGroup], List[str]]:
+        """Detect near-duplicate photos and return duplicate groups and list of files to filter out."""
+        pass
 
 
 class IVisionProvider(ABC):

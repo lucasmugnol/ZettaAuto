@@ -174,8 +174,10 @@ class LocalImageProvider(IImageProvider):
                 if cover_fit_strategy == "crop":
                     fitted_photo = ImageOps.fit(main_rgb, (tw, photo_height), Image.Resampling.LANCZOS)
                 else:
-                    # DEFAULT: contain strategy (preserves entire vehicle without cropping)
-                    scale = min(tw / float(orig_w), photo_height / float(orig_h))
+                    # DEFAULT: contain strategy with safety margin & auto offset (guarantees zero vehicle edge clipping)
+                    safe_tw = int(tw * 0.92)
+                    safe_ph = int(photo_height * 0.92)
+                    scale = min(safe_tw / float(orig_w), safe_ph / float(orig_h))
                     scaled_w = max(1, int(orig_w * scale))
                     scaled_h = max(1, int(orig_h * scale))
                     scaled_img = main_rgb.resize((scaled_w, scaled_h), Image.Resampling.LANCZOS)
