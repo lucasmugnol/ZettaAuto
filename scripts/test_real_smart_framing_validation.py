@@ -1,9 +1,10 @@
-"""Real lot validation script for Smart Framing Engine rendering on Corolla photos (Sprint 2.3.2)."""
+"""Real lot validation script for Smart Framing Engine rendering on Corolla photos & off-center cropping (Sprint 2.3.2)."""
 
 import os
 import sys
 import json
 import shutil
+import hashlib
 import argparse
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
@@ -11,6 +12,89 @@ from PIL import Image, ImageDraw, ImageFont
 sys.path.insert(0, ".")
 
 from automedia.pipeline import LocalPipeline
+from automedia.core.models import VehicleBoundingBox, VehicleDetectionResult, ImageAsset
+from automedia.providers.noop_vehicle_detector import NoOpVehicleDetector
+from automedia.modules.smart_framing import SmartFramingEngine, FramingPlan
+from automedia.modules.image_processor import ImageProcessor
+from automedia.providers.local_image_provider import LocalImageProvider
+from automedia.core.models import PipelineConfig
+
+
+def run_off_center_effective_crop_validation(out_path: Path):
+    print("\n[4/4] Running Effective Crop Box Validation on Off-Center Vehicle (crop_box != full_image)...")
+
+    offcenter_dir = out_path / "off_center_dataset"
+    offcenter_dir.mkdir(parents=True, exist_ok=True)
+
+    offcenter_job_dir = out_path / "job_offcenter"
+    shutil.rmtree(offcenter_job_dir, ignore_errors=True)
+
+    # Synthetic off-center car photo (1600 x 1200), vehicle situated on the far right (x1=900, y1=300, x2=1500, y2=900)
+    synth_path = offcenter_dir / "offcenter_car.jpg"
+    img = Image.new("RGB", (1600, 1200), color=(220, 225, 230))
+    draw = ImageDraw.Draw(img)
+
+    # Draw background elements
+    draw.rectangle([0, 0, 1600, 500], fill=(135, 206, 235)) # Sky
+    draw.rectangle([0, 500, 1600, 1200], fill=(100, 110, 120)) # Asphalt
+
+    # Draw off-center car body on the right
+    draw.rectangle([900, 450, 1500, 850], fill=(220, 30, 30)) # Red car body
+    draw.rectangle([1050, 300, 1400, 450], fill=(50, 50, 50)) # Car cabin
+    draw.rectangle([1000, 750, 1300, 800], fill=(255, 255, 255)) # License plate on car
+    img.save(synth_path, quality=95)
+
+    # Mock detector returning exact off-center bounding box
+    class MockOffCenterDetector:
+        def detect_vehicle(self, image_path, asset):
+            box = VehicleBoundingBox(x1=900.0, y1=300.0, x2=1500.0, y2=850.0)
+            return VehicleDetectionResult(
+                detected=True,
+                label="vehicle",
+                confidence=0.92,
+                bbox=box,
+                image_width=1600,
+                image_height=1200,
+                provider="mock_offcenter"
+            )
+
+    pipeline = LocalPipeline()
+    pipeline._injected_vehicle_detector = MockOffCenterDetector()
+
+    job_offcenter, res_offcenter = pipeline.run(
+        input_dir=str(offcenter_dir),
+        output_dir=str(offcenter_job_dir),
+        brand_config_path="config/brand.json",
+        vehicle_config_path="config/vehicle.json",
+        pipeline_config_path="config/pipeline.json"
+    )
+
+    if not res_offcenter.success:
+        print(f"[ERRO] Validação de enquadramento efetivo falhou: {job_offcenter.errors}")
+        sys.exit(1)
+
+    offcenter_manifest_path = Path(offcenter_job_dir) / job_offcenter.job_id / "manifest.json"
+    with open(offcenter_manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+
+    sf_plan = manifest.get("smart_framing_plan", {})
+    comp_integrity = manifest.get("composer_integrity_verification", {})
+    crop_box_str = sf_plan.get("source_crop_box")
+
+    effective_crop_occurred = crop_box_str != "(0, 0, 1600, 1200)" and sf_plan.get("smart_framing_applied", False)
+
+    print(f"  Synthetic Off-Center Photo Size: (1600, 1200)")
+    print(f"  Calculated Crop Box:              {crop_box_str}")
+    print(f"  Smart Framing Applied:            {sf_plan.get('smart_framing_applied')}")
+    print(f"  Recorte Inteligente Efetivo:     {effective_crop_occurred}")
+    print(f"  Composer Hash Match:             {comp_integrity.get('composer_input_matches_latest_transformation')}")
+
+    return {
+        "offcenter_crop_box": crop_box_str,
+        "effective_crop_occurred": effective_crop_occurred,
+        "composer_input_matches_latest_transformation": comp_integrity.get("composer_input_matches_latest_transformation"),
+        "composer_input_sha256": comp_integrity.get("composer_input_sha256")
+    }
 
 
 def run_smart_framing_validation(input_dir: str, output_dir: str):
@@ -26,7 +110,7 @@ def run_smart_framing_validation(input_dir: str, output_dir: str):
     comparison_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Run Pipeline with Smart Framing (grounding_dino)
-    print("\n[1/3] Running LocalPipeline with Grounding DINO Smart Framing...")
+    print("\n[1/4] Running LocalPipeline with Grounding DINO Smart Framing...")
     smart_output_dir = out_path / "job_smart"
     shutil.rmtree(smart_output_dir, ignore_errors=True)
 
@@ -50,11 +134,10 @@ def run_smart_framing_validation(input_dir: str, output_dir: str):
         manifest_smart = json.load(f)
 
     # 2. Run Pipeline with Standard Contain (provider=none)
-    print("\n[2/3] Running LocalPipeline with Standard Contain (provider=none)...")
+    print("\n[2/4] Running LocalPipeline with Standard Contain (provider=none)...")
     contain_output_dir = out_path / "job_contain"
     shutil.rmtree(contain_output_dir, ignore_errors=True)
 
-    from automedia.providers.noop_vehicle_detector import NoOpVehicleDetector
     pipeline_contain = LocalPipeline()
     pipeline_contain._injected_vehicle_detector = NoOpVehicleDetector()
     job_contain, res_contain = pipeline_contain.run(
@@ -68,7 +151,7 @@ def run_smart_framing_validation(input_dir: str, output_dir: str):
     contain_job_dir = Path(contain_output_dir) / job_contain.job_id
 
     # 3. Process Side-by-Side Visual Comparison & Artifacts
-    print("\n[3/3] Generating Side-by-Side Visual Comparison Artifacts...")
+    print("\n[3/4] Generating Side-by-Side Visual Comparison Artifacts...")
 
     cover_smart_img_path = smart_job_dir / "cover.jpg"
     cover_contain_img_path = contain_job_dir / "cover.jpg"
@@ -109,6 +192,9 @@ def run_smart_framing_validation(input_dir: str, output_dir: str):
     trans_provenance = manifest_smart.get("cover_transformation_provenance", {})
     comp_integrity = manifest_smart.get("composer_integrity_verification", {})
 
+    # 4. Off-Center Effective Crop Validation
+    offcenter_res = run_off_center_effective_crop_validation(out_path)
+
     report = {
         "status": "SUCCESS",
         "selected_cover_file": selected_filename,
@@ -119,6 +205,7 @@ def run_smart_framing_validation(input_dir: str, output_dir: str):
         "cover_transformation_provenance": trans_provenance,
         "composer_integrity_verification": comp_integrity,
         "smart_framing_applied": sf_plan.get("smart_framing_applied", False),
+        "offcenter_effective_crop_validation": offcenter_res,
         "side_by_side_comparison_image": str(side_by_side_path.relative_to(out_path)),
         "selected_source_image": str(orig_copy_path.relative_to(out_path))
     }
@@ -129,14 +216,15 @@ def run_smart_framing_validation(input_dir: str, output_dir: str):
 
     print("\n" + "=" * 70)
     print("VALIDAÇÃO CONCLUÍDA COM SUCESSO!")
-    print(f"Fotografia Selecionada para Capa:  {selected_filename}")
-    print(f"Smart Framing Aplicado na Capa:  {sf_plan.get('smart_framing_applied')}")
-    print(f"Caixa de Corte (Crop Box):         {sf_plan.get('source_crop_box')}")
-    print(f"Estratégia de Enquadramento:       {sf_plan.get('fit_strategy')}")
+    print(f"Fotografia Selecionada para Capa:   {selected_filename}")
+    print(f"Smart Framing Aplicado na Capa:   {sf_plan.get('smart_framing_applied')}")
+    print(f"Caixa de Corte (Corolla):         {sf_plan.get('source_crop_box')}")
+    print(f"Recorte Efetivo (Foto Descentrada): {offcenter_res.get('offcenter_crop_box')}")
     print(f"Seleção da Identidade (Hash Match): {sel_identity.get('source_identity_match')}")
-    print(f"Proveniência da Transformação:     {trans_provenance.get('transformation_completed')}")
-    print(f"Integridade do Compositor:        {comp_integrity.get('processor_output_equals_composer_input')}")
-    print(f"Imagem Lado a Lado Salva em:       {side_by_side_path}")
+    print(f"Proveniência da Transformação:      {trans_provenance.get('transformation_completed')}")
+    print(f"Integridade do Compositor:         {comp_integrity.get('composer_input_matches_latest_transformation')}")
+    print(f"Hash do Compositor Validador:       {comp_integrity.get('composer_input_sha256')}")
+    print(f"Imagem Lado a Lado Salva em:        {side_by_side_path}")
     print("=" * 70)
 
 

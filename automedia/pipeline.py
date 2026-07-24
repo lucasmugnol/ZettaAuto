@@ -221,7 +221,7 @@ class LocalPipeline:
             photos_output_dir = os.path.join(job_output_dir, "photos")
             os.makedirs(photos_output_dir, exist_ok=True)
 
-            # Stage 7: Process Cover Image & Compose Layout (Grounding DINO + Smart Framing Rendering + 2-Stage Hash Traceability)
+            # Stage 7: Process Cover Image & Compose Layout (Plate Masking on Source -> Smart Framing Rendering -> Composer Hash Verification)
             t0 = time.time()
             image_processor = ImageProcessor(self.image_provider, pipeline_cfg)
             brand_composer = BrandComposer(self.image_provider, pipeline_cfg)
@@ -251,7 +251,7 @@ class LocalPipeline:
                         h.update(chunk)
                 return h.hexdigest()
 
-            # Item 3: Selection Identity Check
+            # Selection Identity Check (Original Source Photo)
             selected_asset_path = os.path.abspath(cover_asset.file_path)
             selected_asset_sha256 = _sha256_file(selected_asset_path)
             processing_source_path = selected_asset_path
@@ -270,19 +270,38 @@ class LocalPipeline:
             if not source_identity_match:
                 raise ProcessingError("Source asset identity mismatch before processing.")
 
+            temp_plate_covered_source = os.path.join(job_output_dir, f"temp_plate_{cover_asset.filename}")
             temp_cover_path = os.path.join(job_output_dir, "temp_cover.jpg")
             final_cover_path = os.path.join(job_output_dir, "cover.jpg")
 
             try:
-                # Item 1: Pass framing_plan to process_image to render Smart Framing
+                # Step 1: Apply Plate Cover on temporary copy of original source image (using original coordinates)
+                source_for_rendering = cover_asset
+                plate_covered_source_sha256 = selected_asset_sha256
+
+                if cover_analysis.plate_regions:
+                    plate_ok = image_processor.apply_plate_cover(
+                        selected_asset_path, temp_plate_covered_source, cover_analysis.plate_regions, brand_cfg.primary_color
+                    )
+                    if plate_ok and os.path.exists(temp_plate_covered_source):
+                        source_for_rendering = ImageAsset(
+                            filename=cover_asset.filename,
+                            path=temp_plate_covered_source,
+                            file_hash="",
+                            width=cover_asset.width,
+                            height=cover_asset.height,
+                            file_size_bytes=os.path.getsize(temp_plate_covered_source)
+                        )
+                        plate_covered_source_sha256 = _sha256_file(temp_plate_covered_source)
+
+                # Step 2: Render Smart Framing on plate-covered source image
                 proc_ok = image_processor.process_image(
-                    asset=cover_asset,
+                    asset=source_for_rendering,
                     temp_output_path=temp_cover_path,
                     target_dimensions=cover_target_dims,
                     framing_plan=framing_plan
                 )
 
-                # Item 2: Validate that Smart Framing was actually applied
                 smart_framing_applied = (
                     proc_ok
                     and os.path.exists(temp_cover_path)
@@ -300,33 +319,37 @@ class LocalPipeline:
                     "fit_strategy": framing_plan.fit_strategy if framing_plan else "contain"
                 }
 
-                # Item 3: Transformation Provenance Check
+                # Step 3: Compute exact Transformation Provenance
                 processed_cover_path = os.path.abspath(temp_cover_path)
-                processed_cover_sha256 = _sha256_file(processed_cover_path) if os.path.exists(processed_cover_path) else ""
-                transformation_completed = os.path.exists(processed_cover_path)
+                smart_framed_output_sha256 = _sha256_file(processed_cover_path) if os.path.exists(processed_cover_path) else ""
 
                 cover_transformation_provenance = {
+                    "plate_covered_source_path": temp_plate_covered_source if os.path.exists(temp_plate_covered_source) else selected_asset_path,
+                    "plate_covered_source_sha256": plate_covered_source_sha256,
                     "processed_cover_path": processed_cover_path,
-                    "processed_cover_sha256": processed_cover_sha256,
+                    "smart_framed_output_sha256": smart_framed_output_sha256,
                     "source_asset_sha256": selected_asset_sha256,
-                    "transformation_completed": transformation_completed
+                    "transformation_completed": os.path.exists(processed_cover_path)
                 }
 
-                # Item 4: Composer Integrity Check
+                # Step 4: Composer Integrity Verification (Calculated IMMEDIATELY before compose_cover)
                 composer_input_path = os.path.abspath(temp_cover_path)
                 processor_output_equals_composer_input = (processed_cover_path == composer_input_path)
                 composer_input_sha256 = _sha256_file(composer_input_path) if os.path.exists(composer_input_path) else ""
+                composer_input_matches_latest_transformation = (composer_input_sha256 == smart_framed_output_sha256)
 
                 composer_integrity_verification = {
                     "processor_input_asset": cover_asset.filename,
                     "processor_output_path": processed_cover_path,
                     "composer_input_path": composer_input_path,
                     "processor_output_equals_composer_input": processor_output_equals_composer_input,
-                    "composer_input_sha256": composer_input_sha256
+                    "composer_input_sha256": composer_input_sha256,
+                    "smart_framed_output_sha256": smart_framed_output_sha256,
+                    "composer_input_matches_latest_transformation": composer_input_matches_latest_transformation
                 }
 
-                if not processor_output_equals_composer_input:
-                    raise ProcessingError("Processor output path does not match Composer input path.")
+                if not processor_output_equals_composer_input or not composer_input_matches_latest_transformation:
+                    raise ProcessingError("Composer input file does not match latest transformation output.")
 
                 # Backward compatibility block
                 cover_identity_verification = {
@@ -338,11 +361,7 @@ class LocalPipeline:
                     "identity_match": source_identity_match
                 }
 
-                if cover_analysis.plate_regions:
-                    image_processor.apply_plate_cover(
-                        temp_cover_path, temp_cover_path, cover_analysis.plate_regions, brand_cfg.primary_color
-                    )
-
+                # Step 5: Compose Layout
                 cover_ok = brand_composer.compose_cover(
                     main_image_path=temp_cover_path,
                     output_path=final_cover_path,
@@ -354,6 +373,7 @@ class LocalPipeline:
                 if not cover_ok or not os.path.exists(final_cover_path):
                     raise CoverFailureError("Cover image composition failed completely.")
             finally:
+                self._safe_remove(temp_plate_covered_source, warnings)
                 self._safe_remove(temp_cover_path, warnings)
 
             benchmark.record_stage("cover_processing", time.time() - t0)

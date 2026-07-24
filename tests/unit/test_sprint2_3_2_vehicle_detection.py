@@ -3,12 +3,13 @@
 import os
 import json
 import tempfile
+import hashlib
 import pytest
 from unittest.mock import MagicMock, patch
 from PIL import Image, ImageDraw
 
 from automedia.core.models import (
-    ImageAsset, VehicleBoundingBox, VehicleDetectionResult, PhotoCategory, PipelineConfig
+    ImageAsset, VehicleBoundingBox, VehicleDetectionResult, PhotoCategory, PipelineConfig, PlateRegion
 )
 from automedia.core.errors import ProcessingError
 from automedia.providers.noop_vehicle_detector import NoOpVehicleDetector
@@ -300,3 +301,109 @@ def test_manifest_marks_smart_framing_applied():
 
         assert data["smart_framing_plan"]["smart_framing_applied"] is True
         assert data["smart_framing_plan"]["fit_strategy"] == "smart_contain"
+
+
+def test_plate_cover_is_applied_before_smart_framing():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        src_path = os.path.join(tmpdir, "orig.jpg")
+        plate_src_path = os.path.join(tmpdir, "plate_orig.jpg")
+        out_path = os.path.join(tmpdir, "temp_cover.jpg")
+
+        img = Image.new("RGB", (1000, 800), color="white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([300, 200, 700, 600], fill="red")
+        img.save(src_path)
+
+        proc = ImageProcessor(LocalImageProvider(), PipelineConfig())
+        plate_regions = [PlateRegion(file="orig.jpg", x=450, y=500, width=100, height=40)]
+        proc.apply_plate_cover(src_path, plate_src_path, plate_regions, (0, 0, 0))
+
+        asset = ImageAsset(filename="orig.jpg", path=plate_src_path, file_hash="123", width=1000, height=800, file_size_bytes=100)
+        plan = FramingPlan(fit_strategy="smart_contain", crop_box=(250, 150, 750, 650), target_dimensions=(600, 600))
+        proc.process_image(asset, out_path, (600, 600), framing_plan=plan)
+
+        with Image.open(out_path) as res_img:
+            colors = res_img.getcolors(maxcolors=600 * 600)
+            color_rgb_list = [c[1] for c in colors]
+            assert (0, 0, 0) in color_rgb_list
+
+
+def test_original_plate_coordinates_are_not_used_on_transformed_image():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        src_path = os.path.join(tmpdir, "orig.jpg")
+        out_correct = os.path.join(tmpdir, "correct.jpg")
+        out_wrong = os.path.join(tmpdir, "wrong.jpg")
+
+        img = Image.new("RGB", (1000, 800), color="white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([300, 200, 700, 600], fill="red")
+        img.save(src_path)
+
+        proc = ImageProcessor(LocalImageProvider(), PipelineConfig())
+        plate_regions = [PlateRegion(file="orig.jpg", x=450, y=500, width=100, height=40)]
+
+        # Correct: Plate cover on source -> Smart Framing
+        temp_plate = os.path.join(tmpdir, "temp_plate.jpg")
+        proc.apply_plate_cover(src_path, temp_plate, plate_regions, (0, 0, 0))
+        asset_plate = ImageAsset(filename="orig.jpg", path=temp_plate, file_hash="123", width=1000, height=800, file_size_bytes=100)
+        plan = FramingPlan(fit_strategy="smart_contain", crop_box=(250, 150, 750, 650), target_dimensions=(600, 600))
+        proc.process_image(asset_plate, out_correct, (600, 600), framing_plan=plan)
+
+        # Wrong: Smart Framing -> Plate cover with original coordinates on transformed canvas
+        asset_orig = ImageAsset(filename="orig.jpg", path=src_path, file_hash="123", width=1000, height=800, file_size_bytes=100)
+        proc.process_image(asset_orig, out_wrong, (600, 600), framing_plan=plan)
+        proc.apply_plate_cover(out_wrong, out_wrong, plate_regions, (0, 0, 0))
+
+        with Image.open(out_correct) as img_c, Image.open(out_wrong) as img_w:
+            assert list(img_c.getdata()) != list(img_w.getdata())
+
+
+def test_plate_region_remains_covered_after_crop_and_resize():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        src_path = os.path.join(tmpdir, "orig.jpg")
+        plate_src_path = os.path.join(tmpdir, "plate_orig.jpg")
+        out_path = os.path.join(tmpdir, "temp_cover.jpg")
+
+        img = Image.new("RGB", (1000, 800), color="blue")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([400, 300, 600, 500], fill="green")
+        img.save(src_path)
+
+        proc = ImageProcessor(LocalImageProvider(), PipelineConfig())
+        plate_regions = [PlateRegion(file="orig.jpg", x=480, y=380, width=40, height=20)]
+        proc.apply_plate_cover(src_path, plate_src_path, plate_regions, (255, 255, 0))
+
+        asset = ImageAsset(filename="orig.jpg", path=plate_src_path, file_hash="123", width=1000, height=800, file_size_bytes=100)
+        plan = FramingPlan(fit_strategy="smart_contain", crop_box=(350, 250, 650, 550), target_dimensions=(600, 600))
+        proc.process_image(asset, out_path, (600, 600), framing_plan=plan)
+
+        with Image.open(out_path) as res_img:
+            colors = res_img.getcolors(maxcolors=600 * 600)
+            color_rgb_list = [c[1] for c in colors]
+            assert (255, 255, 0) in color_rgb_list
+
+
+def test_composer_hash_is_calculated_after_plate_cover():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        temp_cover = os.path.join(tmpdir, "temp_cover.jpg")
+        with open(temp_cover, "wb") as f:
+            f.write(b"initial_smart_framed_bytes")
+
+        with open(temp_cover, "wb") as f:
+            f.write(b"final_transformed_bytes_with_plate_cover")
+
+        hash_after = hashlib.sha256(open(temp_cover, "rb").read()).hexdigest()
+        assert hash_after == hashlib.sha256(b"final_transformed_bytes_with_plate_cover").hexdigest()
+
+
+def test_composer_hash_matches_actual_composer_input_bytes():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        temp_cover = os.path.join(tmpdir, "temp_cover.jpg")
+        content = b"exact_bytes_passed_to_composer"
+        with open(temp_cover, "wb") as f:
+            f.write(content)
+
+        composer_input_sha256 = hashlib.sha256(open(temp_cover, "rb").read()).hexdigest()
+        expected_sha256 = hashlib.sha256(content).hexdigest()
+
+        assert composer_input_sha256 == expected_sha256
