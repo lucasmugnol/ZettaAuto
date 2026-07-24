@@ -1,4 +1,4 @@
-"""Pipeline orchestrator for AutoMedia AI Local Spike (Sprint 2 - Visual Intelligence)."""
+"""Pipeline orchestrator for AutoMedia AI Local Spike (Sprint 2.3 Refactored)."""
 
 import os
 import json
@@ -11,7 +11,7 @@ from automedia.core.models import (
     Job, ImageAsset, VehicleData, BrandConfig, PipelineConfig,
     PlateRegion, VisionAnalysis, ProcessingResult, StageResult, BenchmarkResult,
     PhotoQualityScore, PhotoClassificationResult, DuplicateGroup, GalleryCoverage,
-    CoverSelectionResult, PhotoCategory
+    CoverSelectionResult, PhotoCategory, MacroCategory, VisionAnalysisResult
 )
 from automedia.core.errors import (
     AutomediaError, ConfigurationError, InvalidInputError, EmptyBatchError,
@@ -31,7 +31,7 @@ from automedia.modules.quality_analyzer import QualityAnalyzerModule
 from automedia.modules.cover_selector import CoverSelector
 from automedia.modules.gallery_coverage import GalleryCoverageAnalyzer
 
-from automedia.providers.local_vision_provider import LocalVisionProvider
+from automedia.providers.vision_provider_factory import VisionProviderFactory
 from automedia.providers.local_image_provider import LocalImageProvider
 from automedia.providers.deterministic_text_provider import DeterministicTextProvider
 from automedia.providers.local_storage_provider import LocalStorageProvider
@@ -55,9 +55,7 @@ class LocalPipeline:
         self.photo_classifier = photo_classifier or LocalPhotoClassifier()
         self.duplicate_detector = duplicate_detector or LocalDuplicateDetector()
 
-        self.vision_provider = vision_provider or LocalVisionProvider(
-            analyzer=self.photo_analyzer, classifier=self.photo_classifier
-        )
+        self._injected_vision_provider = vision_provider
         self.image_provider = image_provider or LocalImageProvider()
         self.text_provider = text_provider or DeterministicTextProvider()
         self.storage_provider = storage_provider or LocalStorageProvider()
@@ -94,6 +92,17 @@ class LocalPipeline:
             )
             benchmark.record_stage("load_configs", time.time() - t0)
 
+            # Resolve Vision Provider
+            if self._injected_vision_provider:
+                active_vision_provider = self._injected_vision_provider
+            else:
+                config_file = os.path.join("config", "visual_intelligence.json")
+                cfg_data = {}
+                if os.path.exists(config_file):
+                    with open(config_file, "r", encoding="utf-8") as f:
+                        cfg_data = json.load(f).get("vision_provider", {})
+                active_vision_provider = VisionProviderFactory.create_provider(cfg_data)
+
             # Stage 1: Input Loader
             t0 = time.time()
             input_loader = InputLoader(pipeline_cfg)
@@ -108,36 +117,61 @@ class LocalPipeline:
             warnings.extend(val_warnings)
             benchmark.record_stage("validator", time.time() - t0)
 
-            # Stage 3: Visual Intelligence & Quality Analysis
+            # Stage 3: Visual Intelligence (Selected Provider + Local Duplicate Detection)
             t0 = time.time()
-            quality_module = QualityAnalyzerModule(
-                self.photo_analyzer, self.photo_classifier, self.duplicate_detector
-            )
-            quality_map, class_map, dup_groups, dup_removed = quality_module.analyze_batch(valid_assets)
+            vision_analysis_map: Dict[str, VisionAnalysisResult] = {}
+            class_result_list: List[PhotoClassificationResult] = []
+            quality_map_legacy: Dict[str, PhotoQualityScore] = {}
+            class_map_legacy: Dict[str, PhotoClassificationResult] = {}
 
-            # Update duplicate flags on assets
+            for asset in valid_assets:
+                analysis_res = active_vision_provider.analyze_image(asset.path, asset)
+                vision_analysis_map[asset.filename] = analysis_res
+
+                q_score = PhotoQualityScore(overall_score=analysis_res.quality_score, status="GOOD" if analysis_res.quality_score >= 60 else "WARNING")
+                c_res = PhotoClassificationResult(category=analysis_res.category, macro_category=analysis_res.macro_category, confidence=analysis_res.confidence)
+                
+                quality_map_legacy[asset.filename] = q_score
+                class_map_legacy[asset.filename] = c_res
+                class_result_list.append(c_res)
+
+            # Local duplicate detection
+            dup_groups, dup_removed = self.duplicate_detector.detect_duplicates(valid_assets, quality_map_legacy)
             for asset in valid_assets:
                 if asset.filename in dup_removed:
                     asset.is_duplicate = True
+                    if asset.filename in vision_analysis_map:
+                        vision_analysis_map[asset.filename].duplicate_flag = True
 
-            # Vision Analysis
-            vision_module = VisionModule(self.vision_provider)
-            vision_results = vision_module.analyze(valid_assets, vehicle_data)
+            # Vision Analysis objects for plate regions
+            vision_results = []
+            for asset in valid_assets:
+                va_res = vision_analysis_map[asset.filename]
+                plate_regs = []
+                if va_res.plate_visible and va_res.plate_bbox:
+                    pb = dict(va_res.plate_bbox)
+                    pb.setdefault("file", asset.filename)
+                    plate_regs.append(PlateRegion(**pb))
+                vision_results.append(VisionAnalysis(file=asset.filename, category=va_res.category, confidence=va_res.confidence, plate_regions=plate_regs))
+
             benchmark.record_stage("visual_intelligence", time.time() - t0)
 
-            # Stage 4: Intelligent Cover Selection
+            # Stage 4: Intelligent Cover Selection (Consumes Selected Provider's VisionAnalysisResult)
             t0 = time.time()
             cover_selector = CoverSelector()
             cover_selection = cover_selector.select_cover(
-                valid_assets, quality_map, class_map, dup_removed, vehicle_data
+                assets=valid_assets,
+                analyses=vision_analysis_map,
+                duplicate_files=dup_removed,
+                vehicle_data=vehicle_data
             )
             benchmark.record_stage("cover_selection", time.time() - t0)
 
             cover_asset = next(a for a in valid_assets if a.filename.lower() == cover_selection.selected_file.lower())
             cover_analysis = next((r for r in vision_results if r.file.lower() == cover_asset.filename.lower()), vision_results[0])
 
-            # Secondary photos (exclude selected cover photo)
-            raw_gallery_assets = [a for a in valid_assets if a.filename.lower() != cover_asset.filename.lower()]
+            # Secondary photos (exclude selected cover photo and duplicates)
+            raw_gallery_assets = [a for a in valid_assets if a.filename.lower() != cover_asset.filename.lower() and a.filename not in dup_removed]
             gallery_analyses = [r for r in vision_results if r.file.lower() != cover_asset.filename.lower()]
 
             # Section 11: Category Hierarchy Gallery Ordering
@@ -161,8 +195,8 @@ class LocalPipeline:
             }
 
             def _gallery_sort_key(asset):
-                cat = class_map[asset.filename].category if asset.filename in class_map else PhotoCategory.UNKNOWN
-                q_score = quality_map[asset.filename].overall_score if asset.filename in quality_map else 0.0
+                cat = vision_analysis_map[asset.filename].category if asset.filename in vision_analysis_map else PhotoCategory.UNKNOWN
+                q_score = vision_analysis_map[asset.filename].quality_score if asset.filename in vision_analysis_map else 0.0
                 order_idx = CATEGORY_GALLERY_ORDER.get(cat, 16)
                 return (order_idx, -q_score)
 
@@ -171,13 +205,14 @@ class LocalPipeline:
             # Stage 5: Gallery Coverage Analysis
             t0 = time.time()
             coverage_analyzer = GalleryCoverageAnalyzer()
-            coverage = coverage_analyzer.analyze_coverage(list(class_map.values()))
+            coverage = coverage_analyzer.analyze_coverage(class_result_list)
             benchmark.record_stage("gallery_coverage", time.time() - t0)
 
             # Stage 6: Prepare Output Directory
             exporter = Exporter(self.storage_provider)
             job_output_dir = exporter.prepare_job_output(output_dir, job_id)
             photos_output_dir = os.path.join(job_output_dir, "photos")
+            os.makedirs(photos_output_dir, exist_ok=True)
 
             # Stage 7: Process Cover Image & Compose Layout
             t0 = time.time()
@@ -243,139 +278,107 @@ class LocalPipeline:
 
                     brand_composer.apply_watermark(temp_g_path, out_path, brand_cfg)
 
-                    exported_gallery_files.append(out_path)
-                    successful_count += 1
-                    benchmark.record_image(g_asset.filename, time.time() - t_img_start)
+                    if os.path.exists(out_path):
+                        exported_gallery_files.append(out_name)
+                        successful_count += 1
+                        benchmark.record_image(g_asset.filename, time.time() - t_img_start)
+                    else:
+                        warnings.append(f"Gallery image '{g_asset.filename}' failed export.")
                 except Exception as e:
-                    msg = f"Failed processing secondary photo '{g_asset.filename}': {str(e)}"
-                    warnings.append(msg)
-                    job.failed_images += 1
+                    warnings.append(f"PARTIAL processing: Failed secondary image '{g_asset.filename}': {str(e)}")
                 finally:
                     self._safe_remove(temp_g_path, warnings)
 
-            job.successful_images = successful_count
-            benchmark.record_stage("gallery_processing", time.time() - t0)
+            benchmark.record_stage("secondary_processing", time.time() - t0)
 
-            # Stage 9: Text Generator
+            # Stage 9: Generate Ad Copy Texts
             t0 = time.time()
-            text_gen = TextGenerator(self.text_provider)
-            title, description = text_gen.generate(vehicle_data, brand_cfg)
-            title_file, desc_file = exporter.export_text_artifacts(job_output_dir, title, description)
+            title_text, desc_text = self.text_provider.generate_ad_text(vehicle_data, brand_cfg)
+
+            title_file_path = os.path.join(job_output_dir, "title.txt")
+            desc_file_path = os.path.join(job_output_dir, "description.txt")
+
+            self.storage_provider.save_file(title_file_path, title_text.encode("utf-8"))
+            self.storage_provider.save_file(desc_file_path, desc_text.encode("utf-8"))
             benchmark.record_stage("text_generation", time.time() - t0)
 
-            # Stage 10: Package Output ZIP
-            t0 = time.time()
-            zip_path = exporter.package_final_output(job_output_dir)
-            benchmark.record_stage("export_and_packaging", time.time() - t0)
-
-            # Determine Final Job Status
-            if job.failed_images > 0:
-                final_status = "PARTIAL"
-                warnings.append(f"Job finished with status PARTIAL: {job.failed_images} image(s) failed processing.")
+            # Determine status
+            job.warnings = list(warnings)
+            if len(exported_gallery_files) < len(gallery_assets):
+                job.status = "PARTIAL"
             else:
-                final_status = "COMPLETED"
+                job.status = "COMPLETED"
 
-            job.status = final_status
-            job.finished_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
-
-            # Compile Quality Report
-            good_photos = [f for f, q in quality_map.items() if q.status == "GOOD"]
-            warning_photos = [f for f, q in quality_map.items() if q.status == "WARNING"]
-            bad_photos = [f for f, q in quality_map.items() if q.status == "BAD"]
-
-            quality_report = {
-                "good": good_photos,
-                "warning": warning_photos,
-                "bad": bad_photos,
-                "issues_summary": {
-                    f: q.quality_issues for f, q in quality_map.items() if q.quality_issues
-                }
-            }
-
-            # Stage 11: Write Manifest (Atomic & Expanded)
-            manifest_data = {
-                "job_id": job_id,
-                "pipeline_version": job.pipeline_version,
-                "status": final_status,
-                "started_at": job.started_at,
-                "finished_at": job.finished_at,
-                "config_summary": {
-                    "brand": brand_cfg.company_name,
-                    "vehicle": f"{vehicle_data.manufacturer} {vehicle_data.model}",
-                    "strategy": pipeline_cfg.plate_cover_strategy
-                },
-                "selected_cover": cover_selection.to_dict(),
-                "photo_scores": {f: q.to_dict() for f, q in quality_map.items()},
-                "photo_categories": {f: c.to_dict() for f, c in class_map.items()},
-                "duplicates": {
-                    "duplicate_groups": [g.to_dict() for g in dup_groups],
-                    "duplicate_removed": dup_removed
-                },
-                "quality_report": quality_report,
-                "gallery_coverage": coverage.to_dict(),
-                "input_files": [a.filename for a in raw_assets],
-                "input_hashes": {a.filename: a.file_hash for a in raw_assets},
-                "output_files": [
-                    "cover.jpg",
-                    "title.txt",
-                    "description.txt",
-                    "manifest.json",
-                    "benchmark.json",
-                    "vehicle_media_package.zip"
-                ] + [os.path.relpath(p, job_output_dir) for p in exported_gallery_files],
-                "selected_cover_file": cover_asset.filename,
-                "cover_selection_method": "vehicle_config" if (vehicle_data.cover_image and vehicle_data.cover_image.lower() == cover_asset.filename.lower()) else "intelligent_ranking",
-                "plate_regions": [v.to_dict() for v in vision_results],
-                "plate_identification_method": cover_analysis.plate_detection_method,
-                "warnings": warnings,
-                "errors": errors,
-                "providers_used": {
-                    "vision": self.vision_provider.__class__.__name__,
-                    "image": self.image_provider.__class__.__name__,
-                    "text": self.text_provider.__class__.__name__,
-                    "storage": self.storage_provider.__class__.__name__,
-                    "photo_analyzer": self.photo_analyzer.__class__.__name__,
-                    "photo_classifier": self.photo_classifier.__class__.__name__,
-                    "duplicate_detector": self.duplicate_detector.__class__.__name__
-                }
-            }
-
-            manifest_writer = ManifestWriter()
-            manifest_path = manifest_writer.write_manifest(job_output_dir, manifest_data)
-
-            # Stage 12: Benchmark Measurement & Export (Atomic)
-            total_input_bytes = sum(a.file_size_bytes for a in raw_assets)
-            total_output_bytes = self._compute_folder_size(job_output_dir)
-
-            bench_result = benchmark.finish_measurement(
-                total_images=len(raw_assets),
-                processed_images=successful_count,
-                failed_images=job.failed_images,
-                total_input_bytes=total_input_bytes,
-                total_output_bytes=total_output_bytes
+            # Stage 10: Generate Manifest JSON & Benchmark Metrics
+            t0 = time.time()
+            manifest_writer = ManifestWriter(self.storage_provider)
+            manifest_file_path = manifest_writer.write_manifest(
+                job_output_dir=job_output_dir,
+                job_id=job_id,
+                job_status=job.status,
+                brand_cfg=brand_cfg,
+                vehicle_data=vehicle_data,
+                pipeline_cfg=pipeline_cfg,
+                cover_selection=cover_selection,
+                valid_assets=valid_assets,
+                quality_map=quality_map_legacy,
+                class_map=class_map_legacy,
+                dup_groups=dup_groups,
+                dup_removed=dup_removed,
+                coverage=coverage,
+                warnings=warnings
             )
 
-            benchmark_path = benchmark.write_benchmark(job_output_dir, bench_result)
+            job.successful_images = successful_count
+            job.processed_images = successful_count
+            job.failed_images = job.total_images - successful_count
 
-            job.warnings = warnings
+            total_in = sum(getattr(a, "file_size_bytes", 0) for a in valid_assets)
+            total_out = self._compute_folder_size(job_output_dir)
+
+            benchmark_metric_data = benchmark.finish_measurement(
+                total_images=job.total_images,
+                processed_images=job.processed_images,
+                failed_images=job.failed_images,
+                total_input_bytes=total_in,
+                total_output_bytes=total_out
+            )
+
+            benchmark_file_path = benchmark.write_benchmark(job_output_dir, benchmark_metric_data)
+            benchmark.record_stage("manifest_generation", time.time() - t0)
+
+            # Stage 11: Package ZIP Archive
+            t0 = time.time()
+            zip_filename = f"{job_id}.zip"
+            zip_output_path = os.path.join(output_dir, zip_filename)
+            job_zip_path = os.path.join(job_output_dir, "vehicle_media_package.zip")
+
+            try:
+                self.storage_provider.create_zip_archive(job_output_dir, zip_output_path)
+                self.storage_provider.create_zip_archive(job_output_dir, job_zip_path)
+            except Exception as e:
+                raise ExportError(f"ZIP packaging failed: {str(e)}")
+
+            benchmark.record_stage("zip_packaging", time.time() - t0)
+            job.ended_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
             res = ProcessingResult(
                 job_id=job_id,
                 success=True,
                 cover_file=final_cover_path,
-                gallery_files=exported_gallery_files,
-                text_title_file=title_file,
-                text_desc_file=desc_file,
-                manifest_file=manifest_path,
-                benchmark_file=benchmark_path,
+                gallery_files=[os.path.join(photos_output_dir, f) for f in exported_gallery_files],
+                text_title_file=title_file_path,
+                text_desc_file=desc_file_path,
+                manifest_file=manifest_file_path,
+                benchmark_file=benchmark_file_path,
                 warnings=warnings,
-                errors=[]
+                errors=errors
             )
             return job, res
 
         except Exception as e:
             job.status = "FAILED"
-            job.finished_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            job.ended_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
             err_msg = str(e)
             job.errors.append(err_msg)
 

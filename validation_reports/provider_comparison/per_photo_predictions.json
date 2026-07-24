@@ -10,7 +10,7 @@
       "category": "FRONT",
       "macro_category": "EXTERIOR",
       "confidence": 0.75,
-      "latency_ms": 97.76
+      "latency_ms": 90.32
     },
     "multimodal": {
       "category": "FRONT_3_4",
@@ -18,9 +18,9 @@
       "confidence": 0.98,
       "suitable_for_cover": true,
       "cover_score": 85.0,
-      "status": "CACHE_HIT",
+      "status": "SUCCESS",
       "fallback_used": false,
-      "latency_ms": 13.48,
+      "latency_ms": 0.0,
       "reasoning": "Clear front 3/4 exterior photo of a silver vehicle in bright daylight. The car is parked on grass with a somewhat cluttered background including dirt mounds and a utility pole. A shadow is visible in the foreground."
     }
   },
@@ -35,7 +35,7 @@
       "category": "FRONT",
       "macro_category": "EXTERIOR",
       "confidence": 0.75,
-      "latency_ms": 86.53
+      "latency_ms": 90.25
     },
     "multimodal": {
       "category": "FRONT_3_4",
@@ -43,9 +43,9 @@
       "confidence": 0.98,
       "suitable_for_cover": true,
       "cover_score": 92.0,
-      "status": "CACHE_HIT",
+      "status": "SUCCESS",
       "fallback_used": false,
-      "latency_ms": 1.99,
+      "latency_ms": 0.0,
       "reasoning": "Clear front 3/4 exterior photo of a silver sedan in bright daylight, parked on grass. The vehicle is well-framed with a visible license plate."
     }
   },
@@ -60,7 +60,7 @@
       "category": "FRONT",
       "macro_category": "EXTERIOR",
       "confidence": 0.75,
-      "latency_ms": 84.2
+      "latency_ms": 97.64
     },
     "multimodal": {
       "category": "REAR_3_4",
@@ -68,9 +68,9 @@
       "confidence": 0.98,
       "suitable_for_cover": true,
       "cover_score": 85.0,
-      "status": "CACHE_HIT",
+      "status": "SUCCESS",
       "fallback_used": false,
-      "latency_ms": 1.01,
+      "latency_ms": 2.0,
       "reasoning": "Clean rear 3/4 exterior photo of a silver sedan in bright daylight with a visible license plate. The vehicle is well-framed, but the background is somewhat busy."
     }
   },
@@ -85,7 +85,7 @@
       "category": "FRONT",
       "macro_category": "EXTERIOR",
       "confidence": 0.75,
-      "latency_ms": 86.42
+      "latency_ms": 87.84
     },
     "multimodal": {
       "category": "REAR_3_4",
@@ -93,9 +93,9 @@
       "confidence": 0.98,
       "suitable_for_cover": true,
       "cover_score": 85.0,
-      "status": "CACHE_HIT",
+      "status": "SUCCESS",
       "fallback_used": false,
-      "latency_ms": 2.0,
+      "latency_ms": 7.03,
       "reasoning": "Clear rear 3/4 exterior photo of the vehicle in bright daylight. Minor background distractions."
     }
   },
@@ -110,7 +110,7 @@
       "category": "FRONT",
       "macro_category": "EXTERIOR",
       "confidence": 0.75,
-      "latency_ms": 81.55
+      "latency_ms": 83.32
     },
     "multimodal": {
       "category": "INTERIOR_FRONT",
@@ -118,9 +118,9 @@
       "confidence": 0.98,
       "suitable_for_cover": false,
       "cover_score": 20.0,
-      "status": "CACHE_HIT",
+      "status": "SUCCESS",
       "fallback_used": false,
-      "latency_ms": 1.26,
+      "latency_ms": 0.0,
       "reasoning": "Clear view of the vehicle's front interior, including the steering wheel, dashboard, and front seats."
     }
   },
@@ -135,7 +135,7 @@
       "category": "FRONT",
       "macro_category": "EXTERIOR",
       "confidence": 0.75,
-      "latency_ms": 81.39
+      "latency_ms": 83.3
     },
     "multimodal": {
       "category": "FRONT",
@@ -145,8 +145,8 @@
       "cover_score": 70.0,
       "status": "FALLBACK_HEURISTIC",
       "fallback_used": true,
-      "latency_ms": 1041.94,
-      "reasoning": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+      "latency_ms": 1659.98,
+      "reasoning": "Heuristic fallback analysis (Visual classification: exterior perspective view) - API inference error: HTTP Error 429: Too Many Requests"
     }
   },
   {
@@ -160,7 +160,7 @@
       "category": "FRONT",
       "macro_category": "EXTERIOR",
       "confidence": 0.75,
-      "latency_ms": 83.77
+      "latency_ms": 83.13
     },
     "multimodal": {
       "category": "TRUNK",
@@ -168,9 +168,9 @@
       "confidence": 0.98,
       "suitable_for_cover": false,
       "cover_score": 20.0,
-      "status": "CACHE_HIT",
+      "status": "SUCCESS",
       "fallback_used": false,
-      "latency_ms": 0.97,
+      "latency_ms": 0.0,
       "reasoning": "Clear photo of a vehicle's trunk space, showing the cargo area with some items."
     }
   },
@@ -185,7 +185,7 @@
       "category": "FRONT",
       "macro_category": "EXTERIOR",
       "confidence": 0.75,
-      "latency_ms": 81.65
+      "latency_ms": 90.2
     },
     "multimodal": {
       "category": "WHEEL",
@@ -193,9 +193,9 @@
       "confidence": 0.98,
       "suitable_for_cover": false,
       "cover_score": 15.0,
-      "status": "CACHE_HIT",
+      "status": "SUCCESS",
       "fallback_used": false,
-      "latency_ms": 1.02,
+      "latency_ms": 7.04,
       "reasoning": "Close-up detail shot of a vehicle's alloy wheel and tire, with a portion of the fender visible. The image is well-lit and clear, focusing on the wheel."
     }
   },
@@ -210,7 +210,7 @@
       "category": "FRONT",
       "macro_category": "EXTERIOR",
       "confidence": 0.75,
-      "latency_ms": 88.42
+      "latency_ms": 90.18
     },
     "multimodal": {
       "category": "ENGINE",
@@ -218,9 +218,9 @@
       "confidence": 0.98,
       "suitable_for_cover": false,
       "cover_score": 10.0,
-      "status": "CACHE_HIT",
+      "status": "SUCCESS",
       "fallback_used": false,
-      "latency_ms": 1.99,
+      "latency_ms": 0.0,
       "reasoning": "Clear photograph of a vehicle's engine compartment with the hood open, showing the engine and surrounding components in good lighting."
     }
   },
@@ -235,7 +235,7 @@
       "category": "FRONT",
       "macro_category": "EXTERIOR",
       "confidence": 0.75,
-      "latency_ms": 87.41
+      "latency_ms": 151.39
     },
     "multimodal": {
       "category": "ENGINE",
@@ -243,9 +243,9 @@
       "confidence": 0.98,
       "suitable_for_cover": false,
       "cover_score": 10.0,
-      "status": "CACHE_HIT",
+      "status": "SUCCESS",
       "fallback_used": false,
-      "latency_ms": 1.14,
+      "latency_ms": 1.99,
       "reasoning": "Clear photograph of a vehicle's engine compartment with the hood open, showing the engine and surrounding components in good lighting."
     }
   }

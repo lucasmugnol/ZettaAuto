@@ -1,9 +1,9 @@
-"""Cover Selector module for intelligent automatic cover photo selection."""
+"""Cover Selector module consuming normalized VisionAnalysisResult objects."""
 
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Union, Any
 from automedia.core.models import (
     ImageAsset, VehicleData, PhotoQualityScore, PhotoClassificationResult,
-    PhotoCategory, MacroCategory, CoverSelectionResult
+    PhotoCategory, MacroCategory, CoverSelectionResult, VisionAnalysisResult
 )
 
 
@@ -30,14 +30,22 @@ class CoverSelector:
     def select_cover(
         self,
         assets: List[ImageAsset],
-        quality_map: Dict[str, PhotoQualityScore],
-        class_map: Dict[str, PhotoClassificationResult],
-        duplicate_removed: List[str],
-        vehicle_data: VehicleData
+        analyses: Any,
+        class_map: Any = None,
+        duplicate_removed: List[str] = None,
+        vehicle_data: VehicleData = None,
+        duplicate_files: List[str] = None
     ) -> CoverSelectionResult:
         valid_assets = [a for a in assets if a.is_valid]
         if not valid_assets:
             raise ValueError("No valid image assets available for cover selection.")
+
+        # Normalize positional/keyword arguments
+        if isinstance(duplicate_removed, VehicleData) and vehicle_data is None:
+            vehicle_data = duplicate_removed
+            duplicate_removed = class_map if isinstance(class_map, list) else []
+
+        dup_list = duplicate_files or duplicate_removed or []
 
         # Check explicit override in vehicle_data
         if vehicle_data and vehicle_data.cover_image:
@@ -52,53 +60,72 @@ class CoverSelector:
                     ranking_candidates=[{
                         "file": match.filename,
                         "total_rank_score": 100.0,
-                        "category": class_map[match.filename].category if match.filename in class_map else PhotoCategory.UNKNOWN,
-                        "overall_quality": quality_map[match.filename].overall_score if match.filename in quality_map else 0.0
+                        "category": PhotoCategory.UNKNOWN,
+                        "overall_quality": 100.0
                     }]
                 )
 
-        # Automatic ranking
-        candidates = []
+        # Normalize input to Dict[str, VisionAnalysisResult]
+        analysis_map: Dict[str, VisionAnalysisResult] = {}
+        for a in valid_assets:
+            fname = a.filename
+            if isinstance(analyses, dict) and fname in analyses and isinstance(analyses[fname], VisionAnalysisResult):
+                analysis_map[fname] = analyses[fname]
+            elif isinstance(class_map, dict) and fname in class_map:
+                q_score = analyses.get(fname, PhotoQualityScore()) if isinstance(analyses, dict) else PhotoQualityScore()
+                cls_res = class_map[fname]
+                analysis_map[fname] = VisionAnalysisResult(
+                    filename=fname,
+                    category=cls_res.category,
+                    macro_category=cls_res.macro_category or MacroCategory.get_macro(cls_res.category),
+                    quality_score=q_score.overall_score,
+                    suitable_for_cover=(cls_res.macro_category == MacroCategory.EXTERIOR),
+                    cover_score=q_score.overall_score
+                )
+            else:
+                analysis_map[fname] = VisionAnalysisResult(filename=fname)
+
+        # Check if ANY valid exterior photo exists
         has_exterior = any(
-            MacroCategory.get_macro(class_map[a.filename].category if a.filename in class_map else PhotoCategory.UNKNOWN) == MacroCategory.EXTERIOR
-            for a in valid_assets
+            v.macro_category == MacroCategory.EXTERIOR for v in analysis_map.values()
         )
 
+        candidates = []
         for asset in valid_assets:
             fname = asset.filename
-            q_score = quality_map.get(fname, PhotoQualityScore())
-            cls_res = class_map.get(fname, PhotoClassificationResult())
-            macro = cls_res.macro_category or MacroCategory.get_macro(cls_res.category)
+            v_res = analysis_map[fname]
+            cat = v_res.category
+            macro = v_res.macro_category or MacroCategory.get_macro(cat)
 
-            cat_weight = self.CATEGORY_WEIGHTS.get(cls_res.category, 0.0)
-            total_rank = q_score.overall_score + cat_weight
+            cat_weight = self.CATEGORY_WEIGHTS.get(cat, 0.0)
+            
+            # Combine vision provider cover_score with quality_score and category weight
+            base_score = (v_res.cover_score * 0.6) + (v_res.quality_score * 0.4)
+            total_rank = base_score + cat_weight
 
-            # Strict Rule: Non-exterior photos receive heavy penalty if valid exterior photos exist
+            # Strict Rule 1: Non-exterior photos receive heavy penalty if valid exterior photos exist
             if has_exterior and macro != MacroCategory.EXTERIOR:
                 total_rank -= 200.0
 
-            # Document photo can never be cover
-            if cls_res.category == PhotoCategory.DOCUMENT:
+            # Strict Rule 2: Document photo can never be cover
+            if cat == PhotoCategory.DOCUMENT:
                 total_rank -= 1000.0
 
             # Penalties
-            if fname in duplicate_removed:
+            if fname in dup_list:
                 total_rank -= 10.0
-            if q_score.status == "BAD":
-                total_rank -= 50.0
-            elif q_score.status == "WARNING":
-                total_rank -= 15.0
             if asset.orientation == "portrait":
                 total_rank -= 15.0
 
             candidates.append({
                 "file": fname,
                 "total_rank_score": round(total_rank, 2),
-                "category": cls_res.category,
+                "category": cat,
                 "macro_category": macro,
-                "overall_quality": q_score.overall_score,
-                "is_duplicate_removed": fname in duplicate_removed,
-                "status": q_score.status
+                "overall_quality": v_res.quality_score,
+                "cover_score": v_res.cover_score,
+                "is_duplicate_removed": fname in dup_list,
+                "status": "GOOD" if v_res.quality_score >= 60 else "WARNING"
             })
 
         candidates_sorted = sorted(candidates, key=lambda c: c["total_rank_score"], reverse=True)

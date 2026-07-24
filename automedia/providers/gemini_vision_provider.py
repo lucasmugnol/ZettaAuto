@@ -11,8 +11,7 @@ from typing import Optional, Dict, Any, Tuple
 from PIL import Image
 
 from automedia.core.interfaces import IMultimodalVisionProvider
-from automedia.core.models import ImageAsset, PhotoCategory, MacroCategory
-from automedia.core.vision_models import MultimodalAnalysisResult
+from automedia.core.models import ImageAsset, PhotoCategory, MacroCategory, VisionAnalysisResult
 from automedia.core.vision_schemas import AUTOMEDIA_VISION_PROMPT_V1, parse_and_validate_vision_json
 from automedia.providers.local_photo_analyzer import LocalPhotoAnalyzer
 from automedia.providers.local_photo_classifier import LocalPhotoClassifier
@@ -36,7 +35,7 @@ class GeminiVisionProvider(IMultimodalVisionProvider):
 
     def analyze_image(
         self, image_path: str, asset: ImageAsset
-    ) -> MultimodalAnalysisResult:
+    ) -> VisionAnalysisResult:
         t0 = time.time()
 
         # 1. Mode = "heuristic" override (offline / privacy mode)
@@ -50,7 +49,6 @@ class GeminiVisionProvider(IMultimodalVisionProvider):
             cached_data = self.cache.get(image_path, "gemini", self.model, self.prompt_version)
             if cached_data:
                 cached_res = self._dict_to_result(cached_data)
-                cached_res.inference_status = "CACHE_HIT"
                 cached_res.latency_ms = round((time.time() - t0) * 1000.0, 2)
                 return cached_res
 
@@ -97,13 +95,12 @@ class GeminiVisionProvider(IMultimodalVisionProvider):
                     )
 
             res = self._dict_to_result(validated_data)
+            res.filename = asset.filename
             res.provider_used = "gemini"
             res.model_used = self.model
-            res.prompt_version = self.prompt_version
-            res.inference_status = "SUCCESS"
-            res.fallback_used = False
             res.latency_ms = round(latency_ms, 2)
-            res.estimated_cost_usd = 0.0001  # Token cost estimate
+            res.estimated_cost_usd = 0.0001
+            res.is_cost_estimated = True
 
             # Save to cache
             if self.cache:
@@ -114,7 +111,6 @@ class GeminiVisionProvider(IMultimodalVisionProvider):
             return res
 
         except Exception as e:
-            # Obfuscate any potential API key leakage in exception messages
             clean_err = str(e).replace(api_key, "[REDACTED_API_KEY]")
             if self.fallback_to_heuristic:
                 return self._heuristic_fallback(
@@ -129,7 +125,6 @@ class GeminiVisionProvider(IMultimodalVisionProvider):
         with open(image_path, "rb") as f:
             b64_data = base64.b64encode(f.read()).decode("utf-8")
 
-        # Determine MIME type
         ext = os.path.splitext(image_path)[1].lower()
         mime_type = "image/jpeg"
         if ext in (".png",):
@@ -168,7 +163,6 @@ class GeminiVisionProvider(IMultimodalVisionProvider):
         latency_ms = (time.time() - t0) * 1000.0
         resp_json = json.loads(resp_body)
 
-        # Extract text from response candidates
         try:
             raw_text = resp_json["candidates"][0]["content"]["parts"][0]["text"]
             return raw_text, latency_ms
@@ -177,7 +171,7 @@ class GeminiVisionProvider(IMultimodalVisionProvider):
 
     def _heuristic_fallback(
         self, image_path: str, asset: ImageAsset, t0: float, reason: str
-    ) -> MultimodalAnalysisResult:
+    ) -> VisionAnalysisResult:
         detailed_q = self.analyzer.analyze_quality(image_path, asset)
         classification = self.classifier.classify_photo(image_path, asset, detailed_q)
 
@@ -189,21 +183,18 @@ class GeminiVisionProvider(IMultimodalVisionProvider):
 
         latency_ms = (time.time() - t0) * 1000.0
 
-        return MultimodalAnalysisResult(
+        return VisionAnalysisResult(
+            filename=asset.filename,
             category=cat,
             macro_category=macro,
-            confidence=classification.confidence,
+            quality_score=detailed_q.overall_score,
             suitable_for_cover=suitable,
             cover_score=c_score,
-            quality_status=detailed_q.status,
-            visual_issues=detailed_q.quality_issues,
-            composition_score=detailed_q.composition_score,
-            framing_score=detailed_q.orientation_score,
-            vehicle_visibility=0.85,
-            content_bbox_estimate=None,
+            duplicate_flag=False,
+            confidence=classification.confidence,
             plate_visible=False,
             plate_bbox=None,
-            reasoning_summary=f"Heuristic fallback analysis ({classification.reason})",
+            reasoning=f"Heuristic fallback analysis ({classification.reason}) - {reason}",
             provider_used="heuristic",
             model_used="local_photo_classifier",
             prompt_version=self.prompt_version,
@@ -211,32 +202,27 @@ class GeminiVisionProvider(IMultimodalVisionProvider):
             fallback_used=True,
             fallback_reason=reason,
             latency_ms=round(latency_ms, 2),
-            estimated_cost_usd=0.0
+            estimated_cost_usd=0.0,
+            is_cost_estimated=False
         )
 
-    def _dict_to_result(self, d: Dict[str, Any]) -> MultimodalAnalysisResult:
+    def _dict_to_result(self, d: Dict[str, Any]) -> VisionAnalysisResult:
         meta = d.get("metadata", {})
-        return MultimodalAnalysisResult(
+        return VisionAnalysisResult(
+            filename=d.get("filename", ""),
             category=d.get("category", PhotoCategory.UNKNOWN),
             macro_category=d.get("macro_category", MacroCategory.UNKNOWN),
-            confidence=float(d.get("confidence", 0.5)),
+            quality_score=float(d.get("quality_score", d.get("composition_score", 70.0))),
             suitable_for_cover=bool(d.get("suitable_for_cover", False)),
             cover_score=float(d.get("cover_score", 0.0)),
-            quality_status=d.get("quality_status", "GOOD"),
-            visual_issues=d.get("visual_issues", []),
-            composition_score=float(d.get("composition_score", 50.0)),
-            framing_score=float(d.get("framing_score", 50.0)),
-            vehicle_visibility=float(d.get("vehicle_visibility", 0.8)),
-            content_bbox_estimate=d.get("content_bbox_estimate"),
+            duplicate_flag=bool(d.get("duplicate_flag", False)),
+            confidence=float(d.get("confidence", 0.5)),
             plate_visible=bool(d.get("plate_visible", False)),
             plate_bbox=d.get("plate_bbox"),
-            reasoning_summary=d.get("reasoning_summary", ""),
+            reasoning=d.get("reasoning", d.get("reasoning_summary", "")),
             provider_used=meta.get("provider_used", "gemini"),
             model_used=meta.get("model_used", self.model),
-            prompt_version=meta.get("prompt_version", self.prompt_version),
-            inference_status=meta.get("inference_status", "SUCCESS"),
-            fallback_used=bool(meta.get("fallback_used", False)),
-            fallback_reason=meta.get("fallback_reason"),
             latency_ms=float(meta.get("latency_ms", 0.0)),
-            estimated_cost_usd=float(meta.get("estimated_cost_usd", 0.0))
+            estimated_cost_usd=float(meta.get("estimated_cost_usd", 0.0001)),
+            is_cost_estimated=bool(meta.get("is_cost_estimated", True))
         )

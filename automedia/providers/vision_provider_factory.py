@@ -1,10 +1,11 @@
-"""Factory for creating vision providers according to pipeline configuration."""
+"""Factory for creating decoupled vision providers according to pipeline configuration."""
 
 import os
 from typing import Dict, Any, Optional
 from automedia.config_loader import load_dotenv
 from automedia.core.interfaces import IMultimodalVisionProvider
 from automedia.providers.gemini_vision_provider import GeminiVisionProvider
+from automedia.providers.heuristic_vision_provider import HeuristicVisionProvider
 
 
 class VisionProviderFactory:
@@ -15,15 +16,13 @@ class VisionProviderFactory:
         load_dotenv()
         cfg = config or {}
 
-        # Allow environment variable override if specified
+        # Check environment variable first, then config
         env_provider = os.environ.get("VISION_PROVIDER")
         provider_type = (env_provider or cfg.get("provider", cfg.get("mode", "gemini"))).lower()
 
-        if provider_type in ("gemini", "multimodal"):
-            gemini_cfg = {**cfg, "provider": "gemini", "mode": "multimodal"}
-            return GeminiVisionProvider(gemini_cfg)
+        if provider_type == "gemini":
+            return GeminiVisionProvider(cfg)
         elif provider_type in ("heuristic", "local"):
-            heuristic_cfg = {**cfg, "provider": "heuristic", "mode": "heuristic"}
-            return GeminiVisionProvider(heuristic_cfg)
+            return HeuristicVisionProvider(cfg)
         else:
             raise ValueError(f"Unsupported Vision Provider type: '{provider_type}'")

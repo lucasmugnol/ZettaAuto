@@ -265,6 +265,9 @@ class PipelineConfig:
 @dataclass
 class VisionAnalysis:
     file: str
+    category: str = PhotoCategory.UNKNOWN
+    photo_type: str = PhotoCategory.UNKNOWN
+    confidence: float = 0.0
     content_bbox_estimate: Dict[str, int] = field(default_factory=lambda: {"x": 0, "y": 0, "width": 0, "height": 0})
     vehicle_bbox: Optional[Dict[str, int]] = None
     plate_regions: List[PlateRegion] = field(default_factory=list)
@@ -408,3 +411,50 @@ class ProcessingResult:
     benchmark_file: Optional[str] = None
     warnings: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
+
+
+@dataclass
+class VisionAnalysisResult:
+    filename: str
+    category: str = PhotoCategory.UNKNOWN
+    macro_category: str = MacroCategory.UNKNOWN
+    quality_score: float = 0.0
+    suitable_for_cover: bool = False
+    cover_score: float = 0.0
+    duplicate_flag: bool = False
+    confidence: float = 1.0
+    plate_visible: bool = False
+    plate_bbox: Optional[Dict[str, int]] = None
+    reasoning: str = ""
+    provider_used: str = "heuristic"
+    model_used: str = "local"
+    prompt_version: str = "v1.0.0"
+    inference_status: str = "SUCCESS"
+    fallback_used: bool = False
+    fallback_reason: Optional[str] = None
+    latency_ms: float = 0.0
+    estimated_cost_usd: float = 0.0
+    is_cost_estimated: bool = True
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "filename": self.filename,
+            "category": self.category,
+            "macro_category": self.macro_category or MacroCategory.get_macro(self.category),
+            "quality_score": round(self.quality_score, 2),
+            "suitable_for_cover": self.suitable_for_cover,
+            "cover_score": round(self.cover_score, 2),
+            "duplicate_flag": self.duplicate_flag,
+            "confidence": round(self.confidence, 2),
+            "plate_visible": self.plate_visible,
+            "plate_bbox": self.plate_bbox,
+            "reasoning": self.reasoning,
+            "metadata": {
+                "provider_used": self.provider_used,
+                "model_used": self.model_used,
+                "latency_ms": round(self.latency_ms, 2),
+                "estimated_cost_usd": round(self.estimated_cost_usd, 6),
+                "is_cost_estimated": self.is_cost_estimated
+            }
+        }
+

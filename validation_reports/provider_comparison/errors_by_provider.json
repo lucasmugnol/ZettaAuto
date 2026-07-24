@@ -75,7 +75,7 @@
       "filename": "IMG_006.jpg",
       "predicted": "FRONT",
       "real": "DASHBOARD",
-      "reason": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+      "reason": "Heuristic fallback analysis (Visual classification: exterior perspective view) - API inference error: HTTP Error 429: Too Many Requests"
     },
     {
       "vehicle_id": "vehicle_01_mobi",
