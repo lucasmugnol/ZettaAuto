@@ -1,7 +1,7 @@
 """Core dataclass models for the AutoMedia AI pipeline."""
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 
 class PhotoCategory:
@@ -199,6 +199,14 @@ class ImageAsset:
     is_valid: bool = True
     error_message: Optional[str] = None
     is_duplicate: bool = False
+
+    @property
+    def file_path(self) -> str:
+        return self.path
+
+    @property
+    def dimensions(self) -> Tuple[int, int]:
+        return (self.width, self.height)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -457,4 +465,84 @@ class VisionAnalysisResult:
                 "is_cost_estimated": self.is_cost_estimated
             }
         }
+
+
+@dataclass
+class VehicleBoundingBox:
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+
+    @property
+    def width(self) -> float:
+        return max(0.0, self.x2 - self.x1)
+
+    @property
+    def height(self) -> float:
+        return max(0.0, self.y2 - self.y1)
+
+    @property
+    def area(self) -> float:
+        return self.width * self.height
+
+    def to_dict(self) -> Dict[str, float]:
+        return {
+            "x1": round(self.x1, 1),
+            "y1": round(self.y1, 1),
+            "x2": round(self.x2, 1),
+            "y2": round(self.y2, 1),
+            "width": round(self.width, 1),
+            "height": round(self.height, 1),
+            "area": round(self.area, 1)
+        }
+
+
+@dataclass
+class VehicleDetectionResult:
+    detected: bool
+    label: str = ""
+    confidence: float = 0.0
+    bbox: Optional[VehicleBoundingBox] = None
+    image_width: int = 0
+    image_height: int = 0
+    touches_left_edge: bool = False
+    touches_right_edge: bool = False
+    touches_top_edge: bool = False
+    touches_bottom_edge: bool = False
+    possible_crop_risk: bool = False
+    source_already_cropped: bool = False
+    provider: str = ""
+    model: str = ""
+    latency_ms: float = 0.0
+    fallback_used: bool = False
+    error: Optional[str] = None
+    detected_boxes_count: int = 0
+    audit_metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "detected": self.detected,
+            "label": self.label,
+            "confidence": round(self.confidence, 4),
+            "bbox": self.bbox.to_dict() if self.bbox else None,
+            "image_width": self.image_width,
+            "image_height": self.image_height,
+            "edge_touches": {
+                "left": self.touches_left_edge,
+                "right": self.touches_right_edge,
+                "top": self.touches_top_edge,
+                "bottom": self.touches_bottom_edge
+            },
+            "possible_crop_risk": self.possible_crop_risk,
+            "source_already_cropped": self.source_already_cropped,
+            "provider": self.provider,
+            "model": self.model,
+            "latency_ms": round(self.latency_ms, 2),
+            "fallback_used": self.fallback_used,
+            "error": self.error,
+            "detected_boxes_count": self.detected_boxes_count,
+            "audit_metadata": self.audit_metadata
+        }
+
 

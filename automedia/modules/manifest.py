@@ -59,6 +59,9 @@ class ManifestWriter:
                 "cover_selection": _serialize(cover_selection),
                 "selected_cover": cover_file,
                 "selected_cover_file": cover_file,
+                "cover_identity_verification": _serialize(kwargs.get("cover_identity_verification")),
+                "vehicle_detection": _serialize(kwargs.get("vehicle_detection")),
+                "smart_framing_plan": _serialize(kwargs.get("smart_framing_plan")),
                 "photo_scores": q_map_ser,
                 "photo_categories": c_map_ser,
                 "duplicates": dup_removed or [],
@@ -67,7 +70,8 @@ class ManifestWriter:
                 "providers_used": {
                     "photo_analyzer": "local_photo_analyzer",
                     "photo_classifier": "local_photo_classifier",
-                    "vision_provider": "hybrid"
+                    "vision_provider": "hybrid",
+                    "vehicle_detector": kwargs.get("vehicle_detector_name", "grounding_dino")
                 },
                 "valid_assets_count": len(valid_assets) if valid_assets else 0,
                 "duplicates_removed": dup_removed or [],

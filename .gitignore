@@ -25,3 +25,10 @@ input/*
 validation_real/*
 !validation_real/README.md
 !validation_real/ground_truth.example.json
+
+# Model weights & detection caches
+models/*
+!models/grounding_dino/README.md
+vehicle_detection_cache/
+validation_reports/*
+

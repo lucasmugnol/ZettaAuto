@@ -66,5 +66,22 @@
       "Engine",
       "Wheel"
     ]
+  },
+  "vehicle_detector": {
+    "provider": "grounding_dino",
+    "model_id": "IDEA-Research/grounding-dino-tiny",
+    "local_model_path": "models/grounding_dino/grounding-dino-tiny",
+    "device": "cpu",
+    "box_threshold": 0.30,
+    "text_threshold": 0.25,
+    "prompts": [
+      "car",
+      "pickup truck",
+      "sport utility vehicle",
+      "van"
+    ],
+    "edge_tolerance_percent": 2.5,
+    "cache_enabled": true,
+    "local_files_only": true
   }
 }

@@ -4,8 +4,19 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Tuple, Optional
 from automedia.core.models import (
     ImageAsset, VehicleData, BrandConfig, PipelineConfig, VisionAnalysis, PlateRegion,
-    PhotoQualityScore, PhotoClassificationResult, DuplicateGroup
+    PhotoQualityScore, PhotoClassificationResult, DuplicateGroup, VehicleDetectionResult
 )
+
+
+class IVehicleDetectorProvider(ABC):
+    """Port for zero-shot object detection of vehicles."""
+
+    @abstractmethod
+    def detect_vehicle(
+        self, image_path: str, asset: ImageAsset
+    ) -> VehicleDetectionResult:
+        """Detect vehicle bounding box in image and return detection result."""
+        pass
 
 
 class IPhotoAnalyzer(ABC):

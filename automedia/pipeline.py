@@ -4,6 +4,7 @@ import os
 import json
 import time
 import uuid
+import hashlib
 import datetime
 from typing import Dict, Any, Tuple, Optional, List
 
@@ -11,7 +12,8 @@ from automedia.core.models import (
     Job, ImageAsset, VehicleData, BrandConfig, PipelineConfig,
     PlateRegion, VisionAnalysis, ProcessingResult, StageResult, BenchmarkResult,
     PhotoQualityScore, PhotoClassificationResult, DuplicateGroup, GalleryCoverage,
-    CoverSelectionResult, PhotoCategory, MacroCategory, VisionAnalysisResult
+    CoverSelectionResult, PhotoCategory, MacroCategory, VisionAnalysisResult,
+    VehicleDetectionResult
 )
 from automedia.core.errors import (
     AutomediaError, ConfigurationError, InvalidInputError, EmptyBatchError,
@@ -30,8 +32,10 @@ from automedia.modules.manifest import ManifestWriter
 from automedia.modules.quality_analyzer import QualityAnalyzerModule
 from automedia.modules.cover_selector import CoverSelector
 from automedia.modules.gallery_coverage import GalleryCoverageAnalyzer
+from automedia.modules.smart_framing import SmartFramingEngine
 
 from automedia.providers.vision_provider_factory import VisionProviderFactory
+from automedia.providers.vehicle_detector_factory import VehicleDetectorFactory
 from automedia.providers.local_image_provider import LocalImageProvider
 from automedia.providers.deterministic_text_provider import DeterministicTextProvider
 from automedia.providers.local_storage_provider import LocalStorageProvider
@@ -44,6 +48,7 @@ class LocalPipeline:
     def __init__(
         self,
         vision_provider=None,
+        vehicle_detector=None,
         image_provider=None,
         text_provider=None,
         storage_provider=None,
@@ -56,6 +61,7 @@ class LocalPipeline:
         self.duplicate_detector = duplicate_detector or LocalDuplicateDetector()
 
         self._injected_vision_provider = vision_provider
+        self._injected_vehicle_detector = vehicle_detector
         self.image_provider = image_provider or LocalImageProvider()
         self.text_provider = text_provider or DeterministicTextProvider()
         self.storage_provider = storage_provider or LocalStorageProvider()
@@ -92,16 +98,17 @@ class LocalPipeline:
             )
             benchmark.record_stage("load_configs", time.time() - t0)
 
+            config_file = os.path.join("config", "visual_intelligence.json")
+            visual_intel_cfg = {}
+            if os.path.exists(config_file):
+                with open(config_file, "r", encoding="utf-8") as f:
+                    visual_intel_cfg = json.load(f)
+
             # Resolve Vision Provider
             if self._injected_vision_provider:
                 active_vision_provider = self._injected_vision_provider
             else:
-                config_file = os.path.join("config", "visual_intelligence.json")
-                cfg_data = {}
-                if os.path.exists(config_file):
-                    with open(config_file, "r", encoding="utf-8") as f:
-                        cfg_data = json.load(f).get("vision_provider", {})
-                active_vision_provider = VisionProviderFactory.create_provider(cfg_data)
+                active_vision_provider = VisionProviderFactory.create_provider(visual_intel_cfg.get("vision_provider", {}))
 
             # Stage 1: Input Loader
             t0 = time.time()
@@ -214,14 +221,57 @@ class LocalPipeline:
             photos_output_dir = os.path.join(job_output_dir, "photos")
             os.makedirs(photos_output_dir, exist_ok=True)
 
-            # Stage 7: Process Cover Image & Compose Layout
+            # Stage 7: Process Cover Image & Compose Layout (Grounding DINO + Smart Framing + SHA256 Check)
             t0 = time.time()
             image_processor = ImageProcessor(self.image_provider, pipeline_cfg)
             brand_composer = BrandComposer(self.image_provider, pipeline_cfg)
 
+            vehicle_detector = self._injected_vehicle_detector or VehicleDetectorFactory.create_detector(
+                visual_intel_cfg.get("vehicle_detector", {})
+            )
+
+            # Perform vehicle detection on Top-1 selected cover photo
+            detection_result = vehicle_detector.detect_vehicle(cover_asset.file_path, cover_asset)
+
+            # Calculate SHA256 hashes for identity match (Item 10)
+            selected_source_path = os.path.abspath(cover_asset.file_path)
+            composer_input_path = selected_source_path
+
+            def _sha256_file(filepath: str) -> str:
+                h = hashlib.sha256()
+                with open(filepath, "rb") as f:
+                    while chunk := f.read(65536):
+                        h.update(chunk)
+                return h.hexdigest()
+
+            selected_source_sha256 = _sha256_file(selected_source_path)
+            composer_input_sha256 = _sha256_file(composer_input_path)
+            identity_match = (selected_source_sha256 == composer_input_sha256)
+
+            cover_identity_verification = {
+                "selected_filename": cover_asset.filename,
+                "selected_source_path": selected_source_path,
+                "selected_source_sha256": selected_source_sha256,
+                "composer_input_path": composer_input_path,
+                "composer_input_sha256": composer_input_sha256,
+                "identity_match": identity_match
+            }
+
+            if not identity_match:
+                raise ProcessingError(
+                    f"Cover image identity mismatch! Selected '{selected_source_path}' hash ({selected_source_sha256}) "
+                    f"does not match composer input hash ({composer_input_sha256})."
+                )
+
             cover_target_dims = (
                 pipeline_cfg.cover_dimensions.get("width", 1080),
                 pipeline_cfg.cover_dimensions.get("height", 1080)
+            )
+
+            # Calculate Smart Framing Plan
+            smart_framing_engine = SmartFramingEngine(safety_margin_percent=8.0)
+            framing_plan = smart_framing_engine.calculate_plan(
+                cover_asset.dimensions, detection_result, cover_target_dims
             )
 
             temp_cover_path = os.path.join(job_output_dir, "temp_cover.jpg")
@@ -260,32 +310,35 @@ class LocalPipeline:
             exported_gallery_files: List[str] = []
             successful_count = 1  # cover succeeded
 
-            for idx, g_asset in enumerate(gallery_assets, start=1):
-                t_img_start = time.time()
-                g_analysis = next((r for r in gallery_analyses if r.file.lower() == g_asset.filename.lower()), None)
-                out_name = f"photo_{idx:02d}.jpg"
-                out_path = os.path.join(photos_output_dir, out_name)
-                temp_g_path = os.path.join(photos_output_dir, f"temp_{out_name}")
+            for sec_asset in gallery_assets:
+                if sec_asset.filename in dup_removed:
+                    continue
+
+                out_filename = f"photo_{len(exported_gallery_files) + 1:02d}_{sec_asset.filename}"
+                out_path = os.path.join(photos_output_dir, out_filename)
+                temp_g_path = os.path.join(job_output_dir, f"temp_{sec_asset.filename}")
 
                 try:
-                    image_processor.process_image(g_asset, temp_g_path, sec_target_dims)
+                    ok = image_processor.process_image(sec_asset, temp_g_path, sec_target_dims)
+                    if ok and os.path.exists(temp_g_path):
+                        sec_va = vision_analysis_map.get(sec_asset.filename)
+                        if sec_va and sec_va.plate_visible and sec_va.plate_bbox:
+                            pb = dict(sec_va.plate_bbox)
+                            pb.setdefault("file", sec_asset.filename)
+                            image_processor.apply_plate_cover(
+                                temp_g_path, temp_g_path, [PlateRegion(**pb)], brand_cfg.primary_color
+                            )
 
-                    plate_regs = g_analysis.plate_regions if g_analysis else []
-                    if plate_regs:
-                        image_processor.apply_plate_cover(
-                            temp_g_path, temp_g_path, plate_regs, brand_cfg.primary_color
-                        )
-
-                    brand_composer.apply_watermark(temp_g_path, out_path, brand_cfg)
-
-                    if os.path.exists(out_path):
-                        exported_gallery_files.append(out_name)
-                        successful_count += 1
-                        benchmark.record_image(g_asset.filename, time.time() - t_img_start)
+                        wm_ok = brand_composer.apply_watermark(temp_g_path, out_path, brand_cfg)
+                        if wm_ok and os.path.exists(out_path):
+                            exported_gallery_files.append(os.path.basename(out_path))
+                            successful_count += 1
+                        else:
+                            warnings.append(f"PARTIAL processing: Watermark failed for secondary photo: {sec_asset.filename}")
                     else:
-                        warnings.append(f"Gallery image '{g_asset.filename}' failed export.")
+                        warnings.append(f"PARTIAL processing: Image processing failed for secondary photo: {sec_asset.filename}")
                 except Exception as e:
-                    warnings.append(f"PARTIAL processing: Failed secondary image '{g_asset.filename}': {str(e)}")
+                    warnings.append(f"PARTIAL processing: Failed secondary image '{sec_asset.filename}': {str(e)}")
                 finally:
                     self._safe_remove(temp_g_path, warnings)
 
@@ -326,7 +379,11 @@ class LocalPipeline:
                 dup_groups=dup_groups,
                 dup_removed=dup_removed,
                 coverage=coverage,
-                warnings=warnings
+                warnings=warnings,
+                vehicle_detection=detection_result,
+                cover_identity_verification=cover_identity_verification,
+                smart_framing_plan=framing_plan,
+                vehicle_detector_name=getattr(vehicle_detector, "provider", "grounding_dino")
             )
 
             job.successful_images = successful_count

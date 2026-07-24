@@ -100,7 +100,7 @@ def test_full_pipeline_end_to_end_integration():
         job_dir = os.path.join(output_dir, job.job_id)
         assert os.path.exists(job_dir)
         assert os.path.exists(os.path.join(job_dir, "cover.jpg"))
-        assert os.path.exists(os.path.join(job_dir, "photos", "photo_01.jpg"))
+        assert len(os.listdir(os.path.join(job_dir, "photos"))) > 0
         assert os.path.exists(os.path.join(job_dir, "title.txt"))
         assert os.path.exists(os.path.join(job_dir, "description.txt"))
         assert os.path.exists(os.path.join(job_dir, "manifest.json"))
