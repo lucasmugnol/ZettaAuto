@@ -16,12 +16,12 @@ class FramingPlan:
     """Plan detailing how an image should be framed for cover composition."""
     crop_box: Tuple[int, int, int, int] # (x1, y1, x2, y2) in source image pixels
     target_dimensions: Tuple[int, int]  # (width, height)
-    margin_percent: float
-    fit_strategy: str                  # "smart_contain" or "contain"
-    bg_fill_required: bool
-    aspect_ratio_preserved: bool
-    possible_crop_risk: bool
-    source_already_cropped: bool
+    margin_percent: float = 8.0
+    fit_strategy: str = "smart_contain" # "smart_contain" or "contain"
+    bg_fill_required: bool = True
+    aspect_ratio_preserved: bool = True
+    possible_crop_risk: bool = False
+    source_already_cropped: bool = False
 
 
 class SmartFramingEngine:

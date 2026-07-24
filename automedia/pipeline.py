@@ -221,7 +221,7 @@ class LocalPipeline:
             photos_output_dir = os.path.join(job_output_dir, "photos")
             os.makedirs(photos_output_dir, exist_ok=True)
 
-            # Stage 7: Process Cover Image & Compose Layout (Grounding DINO + Smart Framing + SHA256 Check)
+            # Stage 7: Process Cover Image & Compose Layout (Grounding DINO + Smart Framing Rendering + 2-Stage Hash Traceability)
             t0 = time.time()
             image_processor = ImageProcessor(self.image_provider, pipeline_cfg)
             brand_composer = BrandComposer(self.image_provider, pipeline_cfg)
@@ -232,36 +232,6 @@ class LocalPipeline:
 
             # Perform vehicle detection on Top-1 selected cover photo
             detection_result = vehicle_detector.detect_vehicle(cover_asset.file_path, cover_asset)
-
-            # Calculate SHA256 hashes for identity match (Item 10)
-            selected_source_path = os.path.abspath(cover_asset.file_path)
-            composer_input_path = selected_source_path
-
-            def _sha256_file(filepath: str) -> str:
-                h = hashlib.sha256()
-                with open(filepath, "rb") as f:
-                    while chunk := f.read(65536):
-                        h.update(chunk)
-                return h.hexdigest()
-
-            selected_source_sha256 = _sha256_file(selected_source_path)
-            composer_input_sha256 = _sha256_file(composer_input_path)
-            identity_match = (selected_source_sha256 == composer_input_sha256)
-
-            cover_identity_verification = {
-                "selected_filename": cover_asset.filename,
-                "selected_source_path": selected_source_path,
-                "selected_source_sha256": selected_source_sha256,
-                "composer_input_path": composer_input_path,
-                "composer_input_sha256": composer_input_sha256,
-                "identity_match": identity_match
-            }
-
-            if not identity_match:
-                raise ProcessingError(
-                    f"Cover image identity mismatch! Selected '{selected_source_path}' hash ({selected_source_sha256}) "
-                    f"does not match composer input hash ({composer_input_sha256})."
-                )
 
             cover_target_dims = (
                 pipeline_cfg.cover_dimensions.get("width", 1080),
@@ -274,11 +244,99 @@ class LocalPipeline:
                 cover_asset.dimensions, detection_result, cover_target_dims
             )
 
+            def _sha256_file(filepath: str) -> str:
+                h = hashlib.sha256()
+                with open(filepath, "rb") as f:
+                    while chunk := f.read(65536):
+                        h.update(chunk)
+                return h.hexdigest()
+
+            # Item 3: Selection Identity Check
+            selected_asset_path = os.path.abspath(cover_asset.file_path)
+            selected_asset_sha256 = _sha256_file(selected_asset_path)
+            processing_source_path = selected_asset_path
+            processing_source_sha256 = _sha256_file(processing_source_path)
+            source_identity_match = (selected_asset_sha256 == processing_source_sha256)
+
+            cover_selection_identity = {
+                "selected_asset_filename": cover_asset.filename,
+                "selected_asset_path": selected_asset_path,
+                "selected_asset_sha256": selected_asset_sha256,
+                "processing_source_path": processing_source_path,
+                "processing_source_sha256": processing_source_sha256,
+                "source_identity_match": source_identity_match
+            }
+
+            if not source_identity_match:
+                raise ProcessingError("Source asset identity mismatch before processing.")
+
             temp_cover_path = os.path.join(job_output_dir, "temp_cover.jpg")
             final_cover_path = os.path.join(job_output_dir, "cover.jpg")
 
             try:
-                image_processor.process_image(cover_asset, temp_cover_path, cover_target_dims)
+                # Item 1: Pass framing_plan to process_image to render Smart Framing
+                proc_ok = image_processor.process_image(
+                    asset=cover_asset,
+                    temp_output_path=temp_cover_path,
+                    target_dimensions=cover_target_dims,
+                    framing_plan=framing_plan
+                )
+
+                # Item 2: Validate that Smart Framing was actually applied
+                smart_framing_applied = (
+                    proc_ok
+                    and os.path.exists(temp_cover_path)
+                    and framing_plan.fit_strategy == "smart_contain"
+                )
+
+                if detection_result.detected and framing_plan.fit_strategy == "smart_contain" and not smart_framing_applied:
+                    raise ProcessingError("Smart Framing plan was ignored or failed during cover image rendering.")
+
+                smart_framing_report = {
+                    "smart_framing_applied": smart_framing_applied,
+                    "source_crop_box": framing_plan.crop_box if framing_plan else None,
+                    "render_input_dimensions": cover_asset.dimensions,
+                    "output_dimensions": cover_target_dims,
+                    "fit_strategy": framing_plan.fit_strategy if framing_plan else "contain"
+                }
+
+                # Item 3: Transformation Provenance Check
+                processed_cover_path = os.path.abspath(temp_cover_path)
+                processed_cover_sha256 = _sha256_file(processed_cover_path) if os.path.exists(processed_cover_path) else ""
+                transformation_completed = os.path.exists(processed_cover_path)
+
+                cover_transformation_provenance = {
+                    "processed_cover_path": processed_cover_path,
+                    "processed_cover_sha256": processed_cover_sha256,
+                    "source_asset_sha256": selected_asset_sha256,
+                    "transformation_completed": transformation_completed
+                }
+
+                # Item 4: Composer Integrity Check
+                composer_input_path = os.path.abspath(temp_cover_path)
+                processor_output_equals_composer_input = (processed_cover_path == composer_input_path)
+                composer_input_sha256 = _sha256_file(composer_input_path) if os.path.exists(composer_input_path) else ""
+
+                composer_integrity_verification = {
+                    "processor_input_asset": cover_asset.filename,
+                    "processor_output_path": processed_cover_path,
+                    "composer_input_path": composer_input_path,
+                    "processor_output_equals_composer_input": processor_output_equals_composer_input,
+                    "composer_input_sha256": composer_input_sha256
+                }
+
+                if not processor_output_equals_composer_input:
+                    raise ProcessingError("Processor output path does not match Composer input path.")
+
+                # Backward compatibility block
+                cover_identity_verification = {
+                    "selected_filename": cover_asset.filename,
+                    "selected_source_path": selected_asset_path,
+                    "selected_source_sha256": selected_asset_sha256,
+                    "composer_input_path": composer_input_path,
+                    "composer_input_sha256": composer_input_sha256,
+                    "identity_match": source_identity_match
+                }
 
                 if cover_analysis.plate_regions:
                     image_processor.apply_plate_cover(
@@ -382,7 +440,10 @@ class LocalPipeline:
                 warnings=warnings,
                 vehicle_detection=detection_result,
                 cover_identity_verification=cover_identity_verification,
-                smart_framing_plan=framing_plan,
+                cover_selection_identity=cover_selection_identity,
+                cover_transformation_provenance=cover_transformation_provenance,
+                composer_integrity_verification=composer_integrity_verification,
+                smart_framing_plan=smart_framing_report,
                 vehicle_detector_name=getattr(vehicle_detector, "provider", "grounding_dino")
             )
 

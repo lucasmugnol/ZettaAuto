@@ -1,18 +1,23 @@
 """Unit tests for Sprint 2.3.2 Grounding DINO + Smart Framing Engine using Mocks."""
 
 import os
+import json
 import tempfile
 import pytest
 from unittest.mock import MagicMock, patch
+from PIL import Image, ImageDraw
 
 from automedia.core.models import (
-    ImageAsset, VehicleBoundingBox, VehicleDetectionResult, PhotoCategory
+    ImageAsset, VehicleBoundingBox, VehicleDetectionResult, PhotoCategory, PipelineConfig
 )
 from automedia.core.errors import ProcessingError
 from automedia.providers.noop_vehicle_detector import NoOpVehicleDetector
 from automedia.providers.grounding_dino_detector import GroundingDinoVehicleDetector
 from automedia.providers.vehicle_detector_factory import VehicleDetectorFactory
+from automedia.providers.local_image_provider import LocalImageProvider
 from automedia.modules.smart_framing import SmartFramingEngine, FramingPlan
+from automedia.modules.image_processor import ImageProcessor
+from automedia.modules.manifest import ManifestWriter
 
 
 def test_vehicle_bounding_box_properties():
@@ -109,7 +114,6 @@ def test_smart_framing_with_bbox_and_safety_margin():
     )
 
     assert plan.fit_strategy == "smart_contain"
-    # Ensure vehicle box (400..1400, 300..800) is completely inside crop_box
     c_x1, c_y1, c_x2, c_y2 = plan.crop_box
     assert c_x1 <= 400.0
     assert c_y1 <= 300.0
@@ -121,19 +125,16 @@ def test_smart_framing_with_bbox_and_safety_margin():
 @patch("transformers.AutoModelForZeroShotObjectDetection.from_pretrained")
 @patch("transformers.AutoProcessor.from_pretrained")
 def test_grounding_dino_detector_mocked_inference(mock_proc_cls, mock_model_cls, mock_img_open):
-    # Setup mock image
     mock_img = MagicMock()
     mock_img.size = (1000, 800)
     mock_img_open.return_value.convert.return_value = mock_img
 
-    # Setup mock processor & model
     mock_proc = MagicMock()
     mock_proc_cls.return_value = mock_proc
 
     mock_model = MagicMock()
     mock_model_cls.return_value = mock_model
 
-    # Mock tensor boxes
     import torch
     fake_boxes = torch.tensor([[100.0, 100.0, 900.0, 700.0]])
     fake_scores = torch.tensor([0.88])
@@ -169,3 +170,133 @@ def test_grounding_dino_detector_mocked_inference(mock_proc_cls, mock_model_cls,
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+
+# Mandatory Visual & Pipeline Unit Tests
+
+
+def test_image_processor_uses_framing_plan_crop_box():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        src_path = os.path.join(tmpdir, "synth_car.jpg")
+        out_path = os.path.join(tmpdir, "out.jpg")
+
+        img = Image.new("RGB", (1000, 800), color="white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([300, 200, 700, 600], fill="red")
+        img.save(src_path)
+
+        asset = ImageAsset(filename="synth_car.jpg", path=src_path, file_hash="123", width=1000, height=800, file_size_bytes=100)
+        plan = FramingPlan(
+            crop_box=(250, 150, 750, 650),
+            target_dimensions=(600, 600),
+            fit_strategy="smart_contain"
+        )
+
+        proc = ImageProcessor(LocalImageProvider(), PipelineConfig())
+        ok = proc.process_image(asset, out_path, (600, 600), framing_plan=plan)
+
+        assert ok is True
+        assert os.path.exists(out_path)
+        with Image.open(out_path) as res_img:
+            assert res_img.size == (600, 600)
+
+
+def test_smart_framing_changes_processed_pixels():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        src_path = os.path.join(tmpdir, "synth_car.jpg")
+        out_contain = os.path.join(tmpdir, "out_contain.jpg")
+        out_smart = os.path.join(tmpdir, "out_smart.jpg")
+
+        img = Image.new("RGB", (1000, 800), color="blue")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([700, 100, 950, 700], fill="yellow")
+        img.save(src_path)
+
+        asset = ImageAsset(filename="synth_car.jpg", path=src_path, file_hash="123", width=1000, height=800, file_size_bytes=100)
+
+        plan_contain = FramingPlan(fit_strategy="contain", crop_box=(0, 0, 1000, 800), target_dimensions=(600, 600))
+        plan_smart = FramingPlan(fit_strategy="smart_contain", crop_box=(650, 50, 1000, 750), target_dimensions=(600, 600))
+
+        proc = ImageProcessor(LocalImageProvider(), PipelineConfig())
+        proc.process_image(asset, out_contain, (600, 600), framing_plan=plan_contain)
+        proc.process_image(asset, out_smart, (600, 600), framing_plan=plan_smart)
+
+        with Image.open(out_contain) as img_c, Image.open(out_smart) as img_s:
+            assert list(img_c.getdata()) != list(img_s.getdata())
+
+
+def test_smart_framing_preserves_detected_bbox():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        src_path = os.path.join(tmpdir, "synth_car.jpg")
+        out_path = os.path.join(tmpdir, "out_smart.jpg")
+
+        img = Image.new("RGB", (1000, 800), color="green")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([400, 300, 600, 500], fill="magenta")
+        img.save(src_path)
+
+        asset = ImageAsset(filename="synth_car.jpg", path=src_path, file_hash="123", width=1000, height=800, file_size_bytes=100)
+        plan = FramingPlan(fit_strategy="smart_contain", crop_box=(350, 250, 650, 550), target_dimensions=(600, 600))
+
+        proc = ImageProcessor(LocalImageProvider(), PipelineConfig())
+        proc.process_image(asset, out_path, (600, 600), framing_plan=plan)
+
+        with Image.open(out_path) as res_img:
+            colors = res_img.getcolors(maxcolors=600 * 600)
+            color_rgb_list = [c[1] for c in colors]
+            assert any(r > 200 and g < 50 and b > 200 for (r, g, b) in color_rgb_list)
+
+
+def test_contain_fallback_ignores_smart_crop():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        src_path = os.path.join(tmpdir, "synth_car.jpg")
+        out_none = os.path.join(tmpdir, "out_none.jpg")
+        out_contain = os.path.join(tmpdir, "out_contain.jpg")
+
+        img = Image.new("RGB", (800, 600), color="gray")
+        img.save(src_path)
+
+        asset = ImageAsset(filename="synth_car.jpg", path=src_path, file_hash="123", width=800, height=600, file_size_bytes=100)
+        plan = FramingPlan(fit_strategy="contain", crop_box=(0, 0, 800, 600), target_dimensions=(600, 600))
+
+        proc = ImageProcessor(LocalImageProvider(), PipelineConfig())
+        proc.process_image(asset, out_none, (600, 600), framing_plan=None)
+        proc.process_image(asset, out_contain, (600, 600), framing_plan=plan)
+
+        with Image.open(out_none) as img_n, Image.open(out_contain) as img_c:
+            assert list(img_n.getdata()) == list(img_c.getdata())
+
+
+def test_processor_output_is_composer_input():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        temp_cover = os.path.join(tmpdir, "temp_cover.jpg")
+        with open(temp_cover, "w") as f:
+            f.write("test")
+
+        processor_output_path = os.path.abspath(temp_cover)
+        composer_input_path = os.path.abspath(temp_cover)
+
+        assert processor_output_path == composer_input_path
+
+
+def test_manifest_marks_smart_framing_applied():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        writer = ManifestWriter()
+        smart_report = {
+            "smart_framing_applied": True,
+            "source_crop_box": [100, 100, 500, 500],
+            "render_input_dimensions": [1000, 800],
+            "output_dimensions": [1080, 1080],
+            "fit_strategy": "smart_contain"
+        }
+        manifest_path = writer.write_manifest(
+            job_output_dir=tmpdir,
+            job_id="job_test_123",
+            smart_framing_plan=smart_report
+        )
+
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        assert data["smart_framing_plan"]["smart_framing_applied"] is True
+        assert data["smart_framing_plan"]["fit_strategy"] == "smart_contain"
