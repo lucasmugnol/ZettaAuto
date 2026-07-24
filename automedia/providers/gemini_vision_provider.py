@@ -54,8 +54,20 @@ class GeminiVisionProvider(IMultimodalVisionProvider):
                 cached_res.latency_ms = round((time.time() - t0) * 1000.0, 2)
                 return cached_res
 
-        # 3. Check API Key
+        # 3. Check API Key (Load .env automatically if present)
         api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+        if not api_key and os.path.exists(".env"):
+            try:
+                with open(".env", "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith("GEMINI_API_KEY="):
+                            api_key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                            os.environ["GEMINI_API_KEY"] = api_key
+                            break
+            except Exception:
+                pass
+
         if not api_key:
             if self.fallback_to_heuristic:
                 return self._heuristic_fallback(

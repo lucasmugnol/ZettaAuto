@@ -9,6 +9,9 @@ ENV/
 .coverage
 htmlcov/
 *.log
+.env
+.env.local
+.cache/
 temp/*
 !temp/.gitkeep
 output/*

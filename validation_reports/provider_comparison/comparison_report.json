@@ -7,17 +7,17 @@
   "heuristic_provider": {
     "specific_category_accuracy_percent": 40.0,
     "macro_category_accuracy_percent": 40.0,
-    "average_latency_ms": 87.74,
+    "average_latency_ms": 94.26,
     "total_calls": 10,
     "cache_hits": 0,
     "estimated_cost_usd": 0.0
   },
   "multimodal_provider": {
-    "specific_category_accuracy_percent": 40.0,
-    "macro_category_accuracy_percent": 40.0,
-    "average_latency_ms": 88.93,
+    "specific_category_accuracy_percent": 50.0,
+    "macro_category_accuracy_percent": 50.0,
+    "average_latency_ms": 5491.14,
     "total_calls": 10,
     "cache_hits": 0,
-    "estimated_cost_usd": 0.0
+    "estimated_cost_usd": 0.0008
   }
 }

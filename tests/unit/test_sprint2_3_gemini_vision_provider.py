@@ -48,19 +48,20 @@ def test_parse_and_validate_vision_json_rejects_invalid_json():
     assert "Failed to parse JSON" in err
 
 
-def test_gemini_vision_provider_fallback_when_api_key_missing():
+def test_gemini_vision_provider_fallback_when_api_key_missing(monkeypatch, tmp_path):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
     provider = GeminiVisionProvider({"mode": "multimodal", "fallback_to_heuristic": True})
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        img_path = os.path.join(tmpdir, "test.jpg")
-        Image.new("RGB", (800, 600), color="blue").save(img_path)
+    img_path = str(tmp_path / "test.jpg")
+    Image.new("RGB", (800, 600), color="blue").save(img_path)
 
-        asset = ImageAsset(path=img_path, filename="test.jpg", width=800, height=600, is_valid=True)
-        res = provider.analyze_image(img_path, asset)
+    asset = ImageAsset(path=img_path, filename="test.jpg", width=800, height=600, is_valid=True)
+    res = provider.analyze_image(img_path, asset)
 
-        assert res.fallback_used is True
-        assert "GEMINI_API_KEY" in res.fallback_reason
-        assert res.inference_status == "FALLBACK_HEURISTIC"
+    assert res.fallback_used is True
+    assert "GEMINI_API_KEY" in res.fallback_reason
+    assert res.inference_status == "FALLBACK_HEURISTIC"
 
 
 def test_gemini_vision_provider_heuristic_mode_override():

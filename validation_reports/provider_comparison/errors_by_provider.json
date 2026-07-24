@@ -46,13 +46,6 @@
   "multimodal": [
     {
       "vehicle_id": "vehicle_01_mobi",
-      "filename": "IMG_005.jpg",
-      "predicted": "FRONT",
-      "real": "INTERIOR_FRONT",
-      "reason": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
-    },
-    {
-      "vehicle_id": "vehicle_01_mobi",
       "filename": "IMG_006.jpg",
       "predicted": "FRONT",
       "real": "DASHBOARD",
@@ -61,16 +54,16 @@
     {
       "vehicle_id": "vehicle_01_mobi",
       "filename": "IMG_007.jpg",
-      "predicted": "FRONT",
+      "predicted": "TRUNK",
       "real": "STEERING",
-      "reason": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+      "reason": "Clear photo of a vehicle's trunk space, showing the cargo area with some items."
     },
     {
       "vehicle_id": "vehicle_01_mobi",
       "filename": "IMG_008.jpg",
-      "predicted": "FRONT",
+      "predicted": "WHEEL",
       "real": "ENGINE",
-      "reason": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+      "reason": "Close-up detail shot of a vehicle's alloy wheel and tire, with a portion of the fender visible. The image is well-lit and clear, focusing on the wheel."
     },
     {
       "vehicle_id": "vehicle_01_mobi",
@@ -82,9 +75,9 @@
     {
       "vehicle_id": "vehicle_01_mobi",
       "filename": "IMG_010.jpg",
-      "predicted": "FRONT",
+      "predicted": "ENGINE",
       "real": "TRUNK",
-      "reason": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+      "reason": "Clear photograph of a vehicle's engine compartment with the hood open, showing the engine and surrounding components in good lighting."
     }
   ]
 }

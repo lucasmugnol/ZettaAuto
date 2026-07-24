@@ -1,3 +1,3 @@
 Provider,Category_Accuracy,Macro_Accuracy,Avg_Latency_ms,Cache_Hits,Est_Cost_USD
-Heuristic_Local,40.0,40.0,87.74,0,0.0
-Gemini_Multimodal,40.0,40.0,88.93,0,0.0
+Heuristic_Local,40.0,40.0,94.26,0,0.0
+Gemini_Multimodal,50.0,50.0,5491.14,0,0.0008
