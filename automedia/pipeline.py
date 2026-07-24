@@ -11,7 +11,7 @@ from automedia.core.models import (
     Job, ImageAsset, VehicleData, BrandConfig, PipelineConfig,
     PlateRegion, VisionAnalysis, ProcessingResult, StageResult, BenchmarkResult,
     PhotoQualityScore, PhotoClassificationResult, DuplicateGroup, GalleryCoverage,
-    CoverSelectionResult
+    CoverSelectionResult, PhotoCategory
 )
 from automedia.core.errors import (
     AutomediaError, ConfigurationError, InvalidInputError, EmptyBatchError,
@@ -137,8 +137,36 @@ class LocalPipeline:
             cover_analysis = next((r for r in vision_results if r.file.lower() == cover_asset.filename.lower()), vision_results[0])
 
             # Secondary photos (exclude selected cover photo)
-            gallery_assets = [a for a in valid_assets if a.filename.lower() != cover_asset.filename.lower()]
+            raw_gallery_assets = [a for a in valid_assets if a.filename.lower() != cover_asset.filename.lower()]
             gallery_analyses = [r for r in vision_results if r.file.lower() != cover_asset.filename.lower()]
+
+            # Section 11: Category Hierarchy Gallery Ordering
+            CATEGORY_GALLERY_ORDER = {
+                PhotoCategory.FRONT_3_4: 1,
+                PhotoCategory.FRONT: 2,
+                PhotoCategory.LEFT_SIDE: 3,
+                PhotoCategory.RIGHT_SIDE: 4,
+                PhotoCategory.REAR_3_4: 5,
+                PhotoCategory.REAR: 6,
+                PhotoCategory.INTERIOR_FRONT: 7,
+                PhotoCategory.DASHBOARD: 8,
+                PhotoCategory.STEERING: 9,
+                PhotoCategory.INTERIOR_REAR: 10,
+                PhotoCategory.TRUNK: 11,
+                PhotoCategory.ENGINE: 12,
+                PhotoCategory.WHEEL: 13,
+                PhotoCategory.KEY: 14,
+                PhotoCategory.DOCUMENT: 15,
+                PhotoCategory.UNKNOWN: 16
+            }
+
+            def _gallery_sort_key(asset):
+                cat = class_map[asset.filename].category if asset.filename in class_map else PhotoCategory.UNKNOWN
+                q_score = quality_map[asset.filename].overall_score if asset.filename in quality_map else 0.0
+                order_idx = CATEGORY_GALLERY_ORDER.get(cat, 16)
+                return (order_idx, -q_score)
+
+            gallery_assets = sorted(raw_gallery_assets, key=_gallery_sort_key)
 
             # Stage 5: Gallery Coverage Analysis
             t0 = time.time()

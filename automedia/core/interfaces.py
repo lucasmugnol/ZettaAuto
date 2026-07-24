@@ -39,6 +39,17 @@ class IDuplicateDetector(ABC):
         pass
 
 
+class IMultimodalVisionProvider(ABC):
+    """Port for multimodal vision model inference."""
+
+    @abstractmethod
+    def analyze_image(
+        self, image_path: str, asset: ImageAsset
+    ) -> Any:
+        """Analyze a single vehicle image with a multimodal vision model."""
+        pass
+
+
 class IVisionProvider(ABC):
     """Port for vision & image semantic analysis."""
 

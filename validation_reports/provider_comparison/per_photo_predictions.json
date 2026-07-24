@@ -1,0 +1,252 @@
+[
+  {
+    "vehicle_id": "vehicle_01_mobi",
+    "filename": "IMG_001.jpg",
+    "ground_truth": {
+      "category": "FRONT_3_4",
+      "macro_category": "EXTERIOR"
+    },
+    "heuristic": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "latency_ms": 89.61
+    },
+    "multimodal": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "suitable_for_cover": true,
+      "cover_score": 70.0,
+      "status": "FALLBACK_HEURISTIC",
+      "fallback_used": true,
+      "latency_ms": 96.81,
+      "reasoning": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+    }
+  },
+  {
+    "vehicle_id": "vehicle_01_mobi",
+    "filename": "IMG_002.jpg",
+    "ground_truth": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR"
+    },
+    "heuristic": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "latency_ms": 93.64
+    },
+    "multimodal": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "suitable_for_cover": true,
+      "cover_score": 70.0,
+      "status": "FALLBACK_HEURISTIC",
+      "fallback_used": true,
+      "latency_ms": 93.97,
+      "reasoning": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+    }
+  },
+  {
+    "vehicle_id": "vehicle_01_mobi",
+    "filename": "IMG_003.jpg",
+    "ground_truth": {
+      "category": "REAR_3_4",
+      "macro_category": "EXTERIOR"
+    },
+    "heuristic": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "latency_ms": 87.53
+    },
+    "multimodal": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "suitable_for_cover": true,
+      "cover_score": 70.0,
+      "status": "FALLBACK_HEURISTIC",
+      "fallback_used": true,
+      "latency_ms": 89.03,
+      "reasoning": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+    }
+  },
+  {
+    "vehicle_id": "vehicle_01_mobi",
+    "filename": "IMG_004.jpg",
+    "ground_truth": {
+      "category": "LEFT_SIDE",
+      "macro_category": "EXTERIOR"
+    },
+    "heuristic": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "latency_ms": 90.9
+    },
+    "multimodal": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "suitable_for_cover": true,
+      "cover_score": 70.0,
+      "status": "FALLBACK_HEURISTIC",
+      "fallback_used": true,
+      "latency_ms": 89.94,
+      "reasoning": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+    }
+  },
+  {
+    "vehicle_id": "vehicle_01_mobi",
+    "filename": "IMG_005.jpg",
+    "ground_truth": {
+      "category": "INTERIOR_FRONT",
+      "macro_category": "INTERIOR"
+    },
+    "heuristic": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "latency_ms": 84.86
+    },
+    "multimodal": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "suitable_for_cover": true,
+      "cover_score": 70.0,
+      "status": "FALLBACK_HEURISTIC",
+      "fallback_used": true,
+      "latency_ms": 85.58,
+      "reasoning": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+    }
+  },
+  {
+    "vehicle_id": "vehicle_01_mobi",
+    "filename": "IMG_006.jpg",
+    "ground_truth": {
+      "category": "DASHBOARD",
+      "macro_category": "INTERIOR"
+    },
+    "heuristic": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "latency_ms": 83.08
+    },
+    "multimodal": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "suitable_for_cover": true,
+      "cover_score": 70.0,
+      "status": "FALLBACK_HEURISTIC",
+      "fallback_used": true,
+      "latency_ms": 83.54,
+      "reasoning": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+    }
+  },
+  {
+    "vehicle_id": "vehicle_01_mobi",
+    "filename": "IMG_007.jpg",
+    "ground_truth": {
+      "category": "STEERING",
+      "macro_category": "INTERIOR"
+    },
+    "heuristic": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "latency_ms": 85.56
+    },
+    "multimodal": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "suitable_for_cover": true,
+      "cover_score": 70.0,
+      "status": "FALLBACK_HEURISTIC",
+      "fallback_used": true,
+      "latency_ms": 84.54,
+      "reasoning": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+    }
+  },
+  {
+    "vehicle_id": "vehicle_01_mobi",
+    "filename": "IMG_008.jpg",
+    "ground_truth": {
+      "category": "ENGINE",
+      "macro_category": "MECHANICAL"
+    },
+    "heuristic": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "latency_ms": 84.98
+    },
+    "multimodal": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "suitable_for_cover": true,
+      "cover_score": 70.0,
+      "status": "FALLBACK_HEURISTIC",
+      "fallback_used": true,
+      "latency_ms": 82.3,
+      "reasoning": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+    }
+  },
+  {
+    "vehicle_id": "vehicle_01_mobi",
+    "filename": "IMG_009.jpg",
+    "ground_truth": {
+      "category": "WHEEL",
+      "macro_category": "DETAIL"
+    },
+    "heuristic": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "latency_ms": 89.75
+    },
+    "multimodal": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "suitable_for_cover": true,
+      "cover_score": 70.0,
+      "status": "FALLBACK_HEURISTIC",
+      "fallback_used": true,
+      "latency_ms": 95.22,
+      "reasoning": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+    }
+  },
+  {
+    "vehicle_id": "vehicle_01_mobi",
+    "filename": "IMG_010.jpg",
+    "ground_truth": {
+      "category": "TRUNK",
+      "macro_category": "INTERIOR"
+    },
+    "heuristic": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "latency_ms": 87.53
+    },
+    "multimodal": {
+      "category": "FRONT",
+      "macro_category": "EXTERIOR",
+      "confidence": 0.75,
+      "suitable_for_cover": true,
+      "cover_score": 70.0,
+      "status": "FALLBACK_HEURISTIC",
+      "fallback_used": true,
+      "latency_ms": 88.35,
+      "reasoning": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+    }
+  }
+]

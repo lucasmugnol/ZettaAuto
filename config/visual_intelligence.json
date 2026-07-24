@@ -1,4 +1,16 @@
 {
+  "vision_provider": {
+    "mode": "multimodal",
+    "provider": "gemini",
+    "model": "gemini-2.5-flash",
+    "timeout_seconds": 30,
+    "max_retries": 1,
+    "fallback_to_heuristic": true,
+    "min_confidence": 0.70,
+    "batch_size": 1,
+    "cache_enabled": true,
+    "prompt_version": "v1.0.0"
+  },
   "quality_thresholds": {
     "sharpness_weight": 0.25,
     "brightness_weight": 0.15,

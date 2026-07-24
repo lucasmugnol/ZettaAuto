@@ -1,0 +1,90 @@
+{
+  "heuristic": [
+    {
+      "vehicle_id": "vehicle_01_mobi",
+      "filename": "IMG_005.jpg",
+      "predicted": "FRONT",
+      "real": "INTERIOR_FRONT",
+      "reason": "Visual classification: exterior perspective view"
+    },
+    {
+      "vehicle_id": "vehicle_01_mobi",
+      "filename": "IMG_006.jpg",
+      "predicted": "FRONT",
+      "real": "DASHBOARD",
+      "reason": "Visual classification: exterior perspective view"
+    },
+    {
+      "vehicle_id": "vehicle_01_mobi",
+      "filename": "IMG_007.jpg",
+      "predicted": "FRONT",
+      "real": "STEERING",
+      "reason": "Visual classification: exterior perspective view"
+    },
+    {
+      "vehicle_id": "vehicle_01_mobi",
+      "filename": "IMG_008.jpg",
+      "predicted": "FRONT",
+      "real": "ENGINE",
+      "reason": "Visual classification: exterior perspective view"
+    },
+    {
+      "vehicle_id": "vehicle_01_mobi",
+      "filename": "IMG_009.jpg",
+      "predicted": "FRONT",
+      "real": "WHEEL",
+      "reason": "Visual classification: exterior perspective view"
+    },
+    {
+      "vehicle_id": "vehicle_01_mobi",
+      "filename": "IMG_010.jpg",
+      "predicted": "FRONT",
+      "real": "TRUNK",
+      "reason": "Visual classification: exterior perspective view"
+    }
+  ],
+  "multimodal": [
+    {
+      "vehicle_id": "vehicle_01_mobi",
+      "filename": "IMG_005.jpg",
+      "predicted": "FRONT",
+      "real": "INTERIOR_FRONT",
+      "reason": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+    },
+    {
+      "vehicle_id": "vehicle_01_mobi",
+      "filename": "IMG_006.jpg",
+      "predicted": "FRONT",
+      "real": "DASHBOARD",
+      "reason": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+    },
+    {
+      "vehicle_id": "vehicle_01_mobi",
+      "filename": "IMG_007.jpg",
+      "predicted": "FRONT",
+      "real": "STEERING",
+      "reason": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+    },
+    {
+      "vehicle_id": "vehicle_01_mobi",
+      "filename": "IMG_008.jpg",
+      "predicted": "FRONT",
+      "real": "ENGINE",
+      "reason": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+    },
+    {
+      "vehicle_id": "vehicle_01_mobi",
+      "filename": "IMG_009.jpg",
+      "predicted": "FRONT",
+      "real": "WHEEL",
+      "reason": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+    },
+    {
+      "vehicle_id": "vehicle_01_mobi",
+      "filename": "IMG_010.jpg",
+      "predicted": "FRONT",
+      "real": "TRUNK",
+      "reason": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+    }
+  ]
+}

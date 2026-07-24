@@ -1,0 +1,23 @@
+{
+  "sprint_version": "2.3 - Vision Provider Comparison",
+  "sample_size": {
+    "total_real_vehicles": 1,
+    "total_real_photographs": 10
+  },
+  "heuristic_provider": {
+    "specific_category_accuracy_percent": 40.0,
+    "macro_category_accuracy_percent": 40.0,
+    "average_latency_ms": 87.74,
+    "total_calls": 10,
+    "cache_hits": 0,
+    "estimated_cost_usd": 0.0
+  },
+  "multimodal_provider": {
+    "specific_category_accuracy_percent": 40.0,
+    "macro_category_accuracy_percent": 40.0,
+    "average_latency_ms": 88.93,
+    "total_calls": 10,
+    "cache_hits": 0,
+    "estimated_cost_usd": 0.0
+  }
+}

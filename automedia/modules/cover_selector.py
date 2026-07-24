@@ -3,7 +3,7 @@
 from typing import List, Dict, Optional, Tuple
 from automedia.core.models import (
     ImageAsset, VehicleData, PhotoQualityScore, PhotoClassificationResult,
-    PhotoCategory, CoverSelectionResult
+    PhotoCategory, MacroCategory, CoverSelectionResult
 )
 
 
@@ -15,16 +15,16 @@ class CoverSelector:
         PhotoCategory.LEFT_SIDE: 20.0,
         PhotoCategory.RIGHT_SIDE: 20.0,
         PhotoCategory.REAR: 15.0,
-        PhotoCategory.INTERIOR_FRONT: -35.0,
-        PhotoCategory.INTERIOR_REAR: -40.0,
-        PhotoCategory.DASHBOARD: -45.0,
-        PhotoCategory.STEERING: -45.0,
-        PhotoCategory.TRUNK: -60.0,
-        PhotoCategory.ENGINE: -60.0,
-        PhotoCategory.WHEEL: -60.0,
-        PhotoCategory.KEY: -80.0,
-        PhotoCategory.DOCUMENT: -100.0,
-        PhotoCategory.UNKNOWN: 0.0
+        PhotoCategory.INTERIOR_FRONT: -50.0,
+        PhotoCategory.INTERIOR_REAR: -55.0,
+        PhotoCategory.DASHBOARD: -60.0,
+        PhotoCategory.STEERING: -60.0,
+        PhotoCategory.TRUNK: -70.0,
+        PhotoCategory.ENGINE: -100.0,
+        PhotoCategory.WHEEL: -100.0,
+        PhotoCategory.KEY: -150.0,
+        PhotoCategory.DOCUMENT: -500.0,
+        PhotoCategory.UNKNOWN: -10.0
     }
 
     def select_cover(
@@ -59,19 +59,33 @@ class CoverSelector:
 
         # Automatic ranking
         candidates = []
+        has_exterior = any(
+            MacroCategory.get_macro(class_map[a.filename].category if a.filename in class_map else PhotoCategory.UNKNOWN) == MacroCategory.EXTERIOR
+            for a in valid_assets
+        )
+
         for asset in valid_assets:
             fname = asset.filename
             q_score = quality_map.get(fname, PhotoQualityScore())
             cls_res = class_map.get(fname, PhotoClassificationResult())
+            macro = cls_res.macro_category or MacroCategory.get_macro(cls_res.category)
 
             cat_weight = self.CATEGORY_WEIGHTS.get(cls_res.category, 0.0)
             total_rank = q_score.overall_score + cat_weight
 
+            # Strict Rule: Non-exterior photos receive heavy penalty if valid exterior photos exist
+            if has_exterior and macro != MacroCategory.EXTERIOR:
+                total_rank -= 200.0
+
+            # Document photo can never be cover
+            if cls_res.category == PhotoCategory.DOCUMENT:
+                total_rank -= 1000.0
+
             # Penalties
             if fname in duplicate_removed:
-                total_rank -= 40.0
+                total_rank -= 10.0
             if q_score.status == "BAD":
-                total_rank -= 30.0
+                total_rank -= 50.0
             elif q_score.status == "WARNING":
                 total_rank -= 15.0
             if asset.orientation == "portrait":
@@ -81,6 +95,7 @@ class CoverSelector:
                 "file": fname,
                 "total_rank_score": round(total_rank, 2),
                 "category": cls_res.category,
+                "macro_category": macro,
                 "overall_quality": q_score.overall_score,
                 "is_duplicate_removed": fname in duplicate_removed,
                 "status": q_score.status
