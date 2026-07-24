@@ -278,21 +278,29 @@ class LocalPipeline:
                 # Step 1: Apply Plate Cover on temporary copy of original source image (using original coordinates)
                 source_for_rendering = cover_asset
                 plate_covered_source_sha256 = selected_asset_sha256
+                plate_cover_required = bool(cover_analysis.plate_regions)
+                plate_cover_applied = False
 
-                if cover_analysis.plate_regions:
+                if plate_cover_required:
                     plate_ok = image_processor.apply_plate_cover(
                         selected_asset_path, temp_plate_covered_source, cover_analysis.plate_regions, brand_cfg.primary_color
                     )
-                    if plate_ok and os.path.exists(temp_plate_covered_source):
-                        source_for_rendering = ImageAsset(
-                            filename=cover_asset.filename,
-                            path=temp_plate_covered_source,
-                            file_hash="",
-                            width=cover_asset.width,
-                            height=cover_asset.height,
-                            file_size_bytes=os.path.getsize(temp_plate_covered_source)
-                        )
-                        plate_covered_source_sha256 = _sha256_file(temp_plate_covered_source)
+                    if not plate_ok or not os.path.exists(temp_plate_covered_source):
+                        raise ProcessingError(f"Plate cover failed for selected cover image: {cover_asset.filename}")
+
+                    plate_covered_source_sha256 = _sha256_file(temp_plate_covered_source)
+                    if plate_covered_source_sha256 == selected_asset_sha256:
+                        raise ProcessingError(f"Plate cover produced no detectable file transformation: {cover_asset.filename}")
+
+                    plate_cover_applied = True
+                    source_for_rendering = ImageAsset(
+                        filename=cover_asset.filename,
+                        path=temp_plate_covered_source,
+                        file_hash="",
+                        width=cover_asset.width,
+                        height=cover_asset.height,
+                        file_size_bytes=os.path.getsize(temp_plate_covered_source)
+                    )
 
                 # Step 2: Render Smart Framing on plate-covered source image
                 proc_ok = image_processor.process_image(
@@ -324,6 +332,9 @@ class LocalPipeline:
                 smart_framed_output_sha256 = _sha256_file(processed_cover_path) if os.path.exists(processed_cover_path) else ""
 
                 cover_transformation_provenance = {
+                    "plate_cover_required": plate_cover_required,
+                    "plate_cover_applied": plate_cover_applied,
+                    "plate_regions_count": len(cover_analysis.plate_regions),
                     "plate_covered_source_path": temp_plate_covered_source if os.path.exists(temp_plate_covered_source) else selected_asset_path,
                     "plate_covered_source_sha256": plate_covered_source_sha256,
                     "processed_cover_path": processed_cover_path,

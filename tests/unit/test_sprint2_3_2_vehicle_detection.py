@@ -19,6 +19,7 @@ from automedia.providers.local_image_provider import LocalImageProvider
 from automedia.modules.smart_framing import SmartFramingEngine, FramingPlan
 from automedia.modules.image_processor import ImageProcessor
 from automedia.modules.manifest import ManifestWriter
+from automedia.pipeline import LocalPipeline
 
 
 def test_vehicle_bounding_box_properties():
@@ -407,3 +408,131 @@ def test_composer_hash_matches_actual_composer_input_bytes():
         expected_sha256 = hashlib.sha256(content).hexdigest()
 
         assert composer_input_sha256 == expected_sha256
+
+
+def test_pipeline_aborts_when_plate_cover_fails():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        input_dir = os.path.join(tmpdir, "input")
+        output_dir = os.path.join(tmpdir, "output")
+        os.makedirs(input_dir, exist_ok=True)
+
+        src_path = os.path.join(input_dir, "car.jpg")
+        img = Image.new("RGB", (1000, 800), color="white")
+        img.save(src_path)
+
+        pipeline = LocalPipeline()
+
+        mock_vision = MagicMock()
+        mock_analysis = MagicMock()
+        mock_analysis.category = PhotoCategory.FRONT_3_4
+        mock_analysis.macro_category = "EXTERIOR"
+        mock_analysis.quality_score = 90.0
+        mock_analysis.confidence = 0.9
+        mock_analysis.plate_visible = True
+        mock_analysis.plate_bbox = {"file": "car.jpg", "x": 100, "y": 100, "width": 50, "height": 20}
+        mock_analysis.duplicate_flag = False
+        mock_vision.analyze_image.return_value = mock_analysis
+        pipeline._injected_vision_provider = mock_vision
+
+        mock_proc = MagicMock()
+        mock_proc.apply_plate_cover.return_value = False
+        mock_proc.process_image.return_value = True
+
+        with patch("automedia.pipeline.ImageProcessor", return_value=mock_proc):
+            job, res = pipeline.run(
+                input_dir=input_dir,
+                output_dir=output_dir,
+                brand_config_path="config/brand.json",
+                vehicle_config_path="config/vehicle.json",
+                pipeline_config_path="config/pipeline.json"
+            )
+
+            assert res.success is False
+            assert any("Plate cover failed" in err for err in job.errors)
+
+
+def test_pipeline_aborts_when_plate_output_is_missing():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        input_dir = os.path.join(tmpdir, "input")
+        output_dir = os.path.join(tmpdir, "output")
+        os.makedirs(input_dir, exist_ok=True)
+
+        src_path = os.path.join(input_dir, "car.jpg")
+        img = Image.new("RGB", (1000, 800), color="white")
+        img.save(src_path)
+
+        pipeline = LocalPipeline()
+
+        mock_vision = MagicMock()
+        mock_analysis = MagicMock()
+        mock_analysis.category = PhotoCategory.FRONT_3_4
+        mock_analysis.macro_category = "EXTERIOR"
+        mock_analysis.quality_score = 90.0
+        mock_analysis.confidence = 0.9
+        mock_analysis.plate_visible = True
+        mock_analysis.plate_bbox = {"file": "car.jpg", "x": 100, "y": 100, "width": 50, "height": 20}
+        mock_analysis.duplicate_flag = False
+        mock_vision.analyze_image.return_value = mock_analysis
+        pipeline._injected_vision_provider = mock_vision
+
+        mock_proc = MagicMock()
+        mock_proc.apply_plate_cover.return_value = True
+        mock_proc.process_image.return_value = True
+
+        with patch("automedia.pipeline.ImageProcessor", return_value=mock_proc):
+            job, res = pipeline.run(
+                input_dir=input_dir,
+                output_dir=output_dir,
+                brand_config_path="config/brand.json",
+                vehicle_config_path="config/vehicle.json",
+                pipeline_config_path="config/pipeline.json"
+            )
+
+            assert res.success is False
+            assert any("Plate cover failed" in err for err in job.errors)
+
+
+def test_pipeline_aborts_when_plate_output_hash_equals_source():
+    import shutil
+    with tempfile.TemporaryDirectory() as tmpdir:
+        input_dir = os.path.join(tmpdir, "input")
+        output_dir = os.path.join(tmpdir, "output")
+        os.makedirs(input_dir, exist_ok=True)
+
+        src_path = os.path.join(input_dir, "car.jpg")
+        img = Image.new("RGB", (1000, 800), color="white")
+        img.save(src_path)
+
+        pipeline = LocalPipeline()
+
+        mock_vision = MagicMock()
+        mock_analysis = MagicMock()
+        mock_analysis.category = PhotoCategory.FRONT_3_4
+        mock_analysis.macro_category = "EXTERIOR"
+        mock_analysis.quality_score = 90.0
+        mock_analysis.confidence = 0.9
+        mock_analysis.plate_visible = True
+        mock_analysis.plate_bbox = {"file": "car.jpg", "x": 100, "y": 100, "width": 50, "height": 20}
+        mock_analysis.duplicate_flag = False
+        mock_vision.analyze_image.return_value = mock_analysis
+        pipeline._injected_vision_provider = mock_vision
+
+        def mock_apply(src, dst, regions, color):
+            shutil.copy(src, dst)
+            return True
+
+        mock_proc = MagicMock()
+        mock_proc.apply_plate_cover.side_effect = mock_apply
+        mock_proc.process_image.return_value = True
+
+        with patch("automedia.pipeline.ImageProcessor", return_value=mock_proc):
+            job, res = pipeline.run(
+                input_dir=input_dir,
+                output_dir=output_dir,
+                brand_config_path="config/brand.json",
+                vehicle_config_path="config/vehicle.json",
+                pipeline_config_path="config/pipeline.json"
+            )
+
+            assert res.success is False
+            assert any("Plate cover produced no detectable file transformation" in err for err in job.errors)
