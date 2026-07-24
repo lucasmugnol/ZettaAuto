@@ -1,23 +1,31 @@
 {
-  "sprint_version": "2.3 - Vision Provider Comparison",
+  "sprint_version": "2.3 - Measured Vision Provider Comparison",
   "sample_size": {
     "total_real_vehicles": 1,
     "total_real_photographs": 10
   },
   "heuristic_provider": {
-    "specific_category_accuracy_percent": 40.0,
+    "specific_category_accuracy_percent": 10.0,
     "macro_category_accuracy_percent": 40.0,
-    "average_latency_ms": 94.26,
+    "cover_top1_accuracy_percent": 0.0,
+    "cover_top3_hit_rate_percent": 0.0,
+    "exterior_cover_rate_percent": 100.0,
+    "average_latency_ms": 85.91,
     "total_calls": 10,
     "cache_hits": 0,
+    "total_fallbacks": 0,
     "estimated_cost_usd": 0.0
   },
   "multimodal_provider": {
-    "specific_category_accuracy_percent": 50.0,
+    "specific_category_accuracy_percent": 30.0,
     "macro_category_accuracy_percent": 50.0,
-    "average_latency_ms": 5491.14,
+    "cover_top1_accuracy_percent": 0.0,
+    "cover_top3_hit_rate_percent": 0.0,
+    "exterior_cover_rate_percent": 100.0,
+    "average_latency_ms": 106.68,
     "total_calls": 10,
-    "cache_hits": 0,
-    "estimated_cost_usd": 0.0008
+    "cache_hits": 9,
+    "total_fallbacks": 1,
+    "estimated_cost_usd": 0.0009
   }
 }

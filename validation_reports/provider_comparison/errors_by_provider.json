@@ -2,48 +2,74 @@
   "heuristic": [
     {
       "vehicle_id": "vehicle_01_mobi",
+      "filename": "IMG_001.jpg",
+      "predicted": "FRONT",
+      "real": "FRONT_3_4"
+    },
+    {
+      "vehicle_id": "vehicle_01_mobi",
+      "filename": "IMG_003.jpg",
+      "predicted": "FRONT",
+      "real": "REAR_3_4"
+    },
+    {
+      "vehicle_id": "vehicle_01_mobi",
+      "filename": "IMG_004.jpg",
+      "predicted": "FRONT",
+      "real": "LEFT_SIDE"
+    },
+    {
+      "vehicle_id": "vehicle_01_mobi",
       "filename": "IMG_005.jpg",
       "predicted": "FRONT",
-      "real": "INTERIOR_FRONT",
-      "reason": "Visual classification: exterior perspective view"
+      "real": "INTERIOR_FRONT"
     },
     {
       "vehicle_id": "vehicle_01_mobi",
       "filename": "IMG_006.jpg",
       "predicted": "FRONT",
-      "real": "DASHBOARD",
-      "reason": "Visual classification: exterior perspective view"
+      "real": "DASHBOARD"
     },
     {
       "vehicle_id": "vehicle_01_mobi",
       "filename": "IMG_007.jpg",
       "predicted": "FRONT",
-      "real": "STEERING",
-      "reason": "Visual classification: exterior perspective view"
+      "real": "STEERING"
     },
     {
       "vehicle_id": "vehicle_01_mobi",
       "filename": "IMG_008.jpg",
       "predicted": "FRONT",
-      "real": "ENGINE",
-      "reason": "Visual classification: exterior perspective view"
+      "real": "ENGINE"
     },
     {
       "vehicle_id": "vehicle_01_mobi",
       "filename": "IMG_009.jpg",
       "predicted": "FRONT",
-      "real": "WHEEL",
-      "reason": "Visual classification: exterior perspective view"
+      "real": "WHEEL"
     },
     {
       "vehicle_id": "vehicle_01_mobi",
       "filename": "IMG_010.jpg",
       "predicted": "FRONT",
-      "real": "TRUNK",
-      "reason": "Visual classification: exterior perspective view"
+      "real": "TRUNK"
     }
   ],
   "multimodal": [
+    {
+      "vehicle_id": "vehicle_01_mobi",
+      "filename": "IMG_002.jpg",
+      "predicted": "FRONT_3_4",
+      "real": "FRONT",
+      "reason": "Clear front 3/4 exterior photo of a silver sedan in bright daylight, parked on grass. The vehicle is well-framed with a visible license plate."
+    },
+    {
+      "vehicle_id": "vehicle_01_mobi",
+      "filename": "IMG_004.jpg",
+      "predicted": "REAR_3_4",
+      "real": "LEFT_SIDE",
+      "reason": "Clear rear 3/4 exterior photo of the vehicle in bright daylight. Minor background distractions."
+    },
     {
       "vehicle_id": "vehicle_01_mobi",
       "filename": "IMG_006.jpg",
@@ -68,9 +94,9 @@
     {
       "vehicle_id": "vehicle_01_mobi",
       "filename": "IMG_009.jpg",
-      "predicted": "FRONT",
+      "predicted": "ENGINE",
       "real": "WHEEL",
-      "reason": "Heuristic fallback analysis (Visual classification: exterior perspective view)"
+      "reason": "Clear photograph of a vehicle's engine compartment with the hood open, showing the engine and surrounding components in good lighting."
     },
     {
       "vehicle_id": "vehicle_01_mobi",
